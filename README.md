@@ -50,15 +50,4 @@ cargo run --release
 ### Sol / Estrella
 ![Star Placeholder](docs/images/sol.png)
 
-## Personalización Rápida
-- Intensidad de bandas gaseosas: modifica `band = n.y * 14.0` en `planet_shader_gas`.
-- Densidad de cráteres: cambiar `cscale` en `planet_shader_rock` (menor valor → más cráteres visibles).
-- Colores base: paletas en cada shader (`cream`, `tan`, `ochre`, etc.).
-- Semilla: se genera en `main.rs`; puedes añadir una tecla para regenerar (por ejemplo, capturar `Key::N` y llamar a `set_noise_seed(...)`).
-
-## Ideas Futuras
-- Atmósfera con dispersión aproximada (rim múltiple con distinta frecuencia).
-- Bloom y tonemapping (requiere paso de post-proceso o librería adicional).
-- Animación de rotación automática y variación temporal del ruido.
-- Exportar frame a archivo (PNG) usando `image` crate.
 
