@@ -143,6 +143,65 @@ pub fn planet_shader_warm(pos: Vec3, normal: Vec3) -> Vec3 {
   c
 }
 
+/// Gaseous planet shader: banded clouds, flow-warp and soft lighting
+pub fn planet_shader_gas(pos: Vec3, normal: Vec3) -> Vec3 {
+  let n = normal.normalize();
+
+  // Directions for isotropic trig-noise and domain warp
+  let v1 = Vec3::new(0.36, 0.93, 0.04).normalize();
+  let v2 = Vec3::new(0.79, -0.61, 0.08).normalize();
+  let v3 = Vec3::new(-0.49, 0.12, 0.86).normalize();
+
+  // Base band coordinate (latitude-like using normal.y) with domain warp
+  let mut band = n.y * 14.0; // number of bands
+  let warp = (glm::dot(&pos, &v1) * 0.9).sin() * 0.55
+          + (glm::dot(&pos, &v2) * 1.6).sin() * 0.35
+          + (glm::dot(&pos, &v3) * 2.3).sin() * 0.18;
+  band += warp;
+
+  // Banded pattern (0..1) with gentle sharpening
+  let band_val = (band.sin() * 0.5 + 0.5).powf(1.2);
+
+  // Fine streaking along flow
+  let streak = ((glm::dot(&pos, &v2) * 6.0).sin().abs() * 0.25)
+             + ((glm::dot(&pos, &v3) * 8.5).sin().abs() * 0.15);
+
+  // Softer gaseous palette (pastel creams/tans/ochres/blue-grays)
+  let cream     = Vec3::new(0.92, 0.88, 0.80);
+  let tan       = Vec3::new(0.78, 0.66, 0.50);
+  let ochre     = Vec3::new(0.76, 0.58, 0.30);
+  let blue_gray = Vec3::new(0.65, 0.72, 0.80);
+
+  // Two base band families and a slow alternation between families
+  let band_family_a = cream * (1.0 - band_val) + tan * band_val;       // light bands
+  let band_family_b = ochre * (1.0 - band_val) + blue_gray * band_val; // darker/cooler bands
+  let family_alt = ((glm::dot(&pos, &v1) * 0.25 + n.y * 0.6).sin() * 0.5 + 0.5).clamp(0.0, 1.0);
+  let family_mix = (family_alt * 0.6 + 0.2).clamp(0.0, 1.0); // mostly A, sometimes B
+
+  let mut color = band_family_a * (1.0 - family_mix) + band_family_b * family_mix;
+  // Add gentle streak modulation
+  color = color * (1.0 + 0.18 * streak);
+
+  // Subtle turbulence to break uniformity
+  let turb = ((glm::dot(&pos, &v1) * 3.1).sin().abs() * 0.12)
+           + ((glm::dot(&pos, &v2) * 4.7).sin().abs() * 0.08);
+  color *= 1.0 + turb;
+
+  // Soft lighting (clouds): mostly diffuse, low specular
+  let light_dir = Vec3::new(0.6, 0.7, 0.3).normalize();
+  let lambert = glm::dot(&n, &light_dir).max(0.0);
+  let spec = lambert.powf(8.0) * 0.05;
+  let ambient = 0.35;
+  let lit = ambient + 0.7 * lambert + spec;
+  color *= lit;
+
+  // Gentle rim light to suggest atmospheric scattering
+  let rim = (1.0 - glm::dot(&n, &Vec3::new(0.0, 0.0, 1.0))).powf(2.2);
+  color += Vec3::new(0.12, 0.18, 0.24) * (rim * 0.18);
+
+  Vec3::new(color.x.clamp(0.0, 1.0), color.y.clamp(0.0, 1.0), color.z.clamp(0.0, 1.0))
+}
+
 /// Rocky planet shader: stratified rock, regolith and cracks with lambertian lighting
 pub fn planet_shader_rock(pos: Vec3, normal: Vec3) -> Vec3 {
   let n = normal.normalize();
@@ -209,9 +268,10 @@ pub fn planet_shader_rock(pos: Vec3, normal: Vec3) -> Vec3 {
 /// Generic shade entry — dispatches to the selected shader variant.
 pub fn shade(pos: Vec3, normal: Vec3) -> Vec3 {
   match get_shader_index() {
+    0 => planet_shader_gas(pos, normal),
     1 => planet_shader_rock(pos, normal),
     2 => planet_shader_sun(pos, normal),
-    _ => planet_shader(pos, normal),
+    _ => planet_shader_gas(pos, normal),
   }
 }
 
