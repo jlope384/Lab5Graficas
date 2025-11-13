@@ -118,7 +118,8 @@ fn main() {
     window.set_position(500, 200);
     window.update();
 
-    framebuffer.set_background_color(0x333355);
+    // Fondo negro para el render
+    framebuffer.set_background_color(0x000000);
 
     // Seed procedural randomness once per run
     if let Ok(now) = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH) {
