@@ -154,52 +154,53 @@ pub fn shade(pos: Vec3, normal: Vec3) -> Vec3 {
 
 /// Sun-like shader: bright core, corona, and radial rays
 pub fn planet_shader_sun(pos: Vec3, normal: Vec3) -> Vec3 {
-  // Use the model-space position's length from origin to compute radial features.
-  let r = (pos.x * pos.x + pos.y * pos.y + pos.z * pos.z).sqrt();
-
-  // Normalize normal for lighting
+  // Normalize normal for view-dependent effects
   let n = normal.normalize();
 
-  // Core intensity: inverse falloff with smoothstep
-  let core_radius = 40.0; // tune relative to model scale
-  let core = (1.0 - (r / core_radius)).clamp(0.0, 1.0);
-  let core = core.powf(2.5);
+  // Uniform emissive base: warm orange, slightly less bright overall
+  let base = Vec3::new(1.0, 0.65, 0.18);
+  let mut color = base * 0.85; // tone down brightness a bit
 
-  // Corona: soft exponential falloff
-  let corona = (- (r / (core_radius * 1.4))).exp();
+  // Isotropic turbulence (replaces angular rays to avoid vertical lines)
+  let p = pos;
+  let v1 = Vec3::new(0.36, 0.93, 0.04).normalize();
+  let v2 = Vec3::new(0.79, -0.61, 0.08).normalize();
+  let v3 = Vec3::new(-0.49, 0.12, 0.86).normalize();
+  let n1 = (glm::dot(&p, &v1) * 0.9).sin();
+  let n2 = (glm::dot(&p, &v2) * 1.6).sin();
+  let n3 = (glm::dot(&p, &v3) * 2.3).sin();
+  let turb = (n1.abs() * 0.5 + n2.abs() * 0.3 + n3.abs() * 0.2).clamp(0.0, 1.0);
+  color += Vec3::new(1.0, 0.8, 0.45) * (turb * 0.25);
 
-  // Radial rays using angular pattern on spherical coords
-  let theta = pos.y.atan2(pos.x); // angle in XY plane
-  let phi = (pos.z / (r.max(1e-6))).acos();
+  // Gentle additive flicker (kept subtle)
+  let flicker = ((pos.x * 0.12).sin() * (pos.y * 0.13).cos() * (pos.z * 0.11).sin() * 0.10 + 0.10).max(0.0);
+  color += base * flicker;
 
-  // Rays: a high-frequency angular modulation with sharpness
-  let rays = ( (theta * 18.0).sin().abs().powf(6.0) * (1.0 - (phi / std::f32::consts::PI)).powf(2.0) ).clamp(0.0, 1.0);
+  // Procedural granulation (isotropic, avoids axis-aligned banding)
+  let g1 = ((glm::dot(&p, &v1) * 0.8).sin().abs());
+  let g2 = ((glm::dot(&p, &v2) * 1.2).sin().abs());
+  let g3 = ((glm::dot(&p, &v3) * 1.6).sin().abs());
+  let gran = (0.5 * g1 + 0.3 * g2 + 0.2 * g3).clamp(0.0, 1.0);
+  // Center around 1.0 with small variance: 0.85..1.10
+  let gran_amp = 0.25; // how much granulation affects
+  color *= (1.0 - gran_amp * 0.6) + gran_amp * gran; // mostly small dark/light patches
 
-  // Surface granulation (noise-like) from trig functions
-  let micro = ((pos.x * 0.12).sin() * (pos.y * 0.13).cos() * (pos.z * 0.11).sin() * 0.25) + 0.75;
+  // Sunspots: higher frequency and gentler darkening to avoid large black areas
+  let n_low = ((pos.x * 0.08).sin() * (pos.y * 0.075).cos() * (pos.z * 0.065).sin() + 1.0) * 0.5; // [0,1]
+  // Invert and sharpen to get smaller spot islands
+  let t = ((0.50 - n_low) / 0.15).clamp(0.0, 1.0);
+  let mut spots = t * t * (3.0 - 2.0 * t); // smoothstep
+  spots = spots.powf(2.2); // smaller, tighter cores
+  // Apply penumbra/umbra effect: lighter overall
+  let penumbra = spots * 0.18;
+  let umbra = spots.powf(1.6) * 0.18; // core
+  let mut spot_att = 1.0 - (penumbra + umbra);
+  spot_att = spot_att.max(0.55); // brightness floor: never below 55%
+  color *= spot_att; // multiplicative darkening in spots only
 
-  // Base sun color (warm yellow-orange)
-  let core_col = Vec3::new(1.0, 0.92, 0.5);
-  let mid_col = Vec3::new(1.0, 0.6, 0.08);
-  let outer_col = Vec3::new(0.9, 0.3, 0.05);
-
-  // Combine layers
-  let mut color = core_col * core + mid_col * (corona * 0.9) + outer_col * (corona * 0.5);
-
-  // Add rays as bright streaks
-  color = color + Vec3::new(1.0, 0.85, 0.6) * (rays * 0.9) * corona;
-
-  // Modulate with micro detail
-  color *= micro.clamp(0.8, 1.2);
-
-  // Apply simple Lambert lighting for some shading
-  let light_dir = Vec3::new(0.6, 0.7, 0.3).normalize();
-  let lambert = glm::dot(&n, &light_dir).max(0.0) * 0.6 + 0.4; // keep it bright
-  color *= lambert;
-
-  // Add a soft rim/glow using normal vs view axis
+  // Add a soft rim/glow using normal vs view axis (additive only)
   let rim = (1.0 - glm::dot(&n, &Vec3::new(0.0, 0.0, 1.0))).powf(3.0);
-  color += Vec3::new(1.0, 0.7, 0.35) * (rim * 0.35);
+  color += Vec3::new(1.0, 0.6, 0.25) * (rim * 0.2); // keep rim subtler for "less bright"
 
   // Tone mapping / clamp
   Vec3::new(color.x.min(1.0), color.y.min(1.0), color.z.min(1.0))
