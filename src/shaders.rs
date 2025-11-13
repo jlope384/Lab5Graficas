@@ -2,9 +2,10 @@ use nalgebra_glm::{Vec3, Vec4, Mat3};
 use crate::vertex::Vertex;
 use crate::Uniforms;
 use nalgebra_glm as glm;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicUsize, AtomicU32, Ordering};
 
 static CURRENT_SHADER: AtomicUsize = AtomicUsize::new(0);
+static NOISE_SEED: AtomicU32 = AtomicU32::new(0);
 
 pub fn set_shader_index(idx: usize) {
   CURRENT_SHADER.store(idx, Ordering::Relaxed);
@@ -12,6 +13,24 @@ pub fn set_shader_index(idx: usize) {
 
 pub fn get_shader_index() -> usize {
   CURRENT_SHADER.load(Ordering::Relaxed)
+}
+
+pub fn set_noise_seed(seed: u32) {
+  NOISE_SEED.store(seed, Ordering::Relaxed);
+}
+
+fn get_noise_seed() -> u32 {
+  NOISE_SEED.load(Ordering::Relaxed)
+}
+
+fn noise_seed_vec3() -> Vec3 {
+  let s = get_noise_seed() as f32;
+  // Pseudo-random generation via sin/fract trick
+  let r1 = ((s * 0.12345).sin() * 43758.5453).fract();
+  let r2 = ((s * 0.34567).sin() * 28123.1234).fract();
+  let r3 = ((s * 0.78901).sin() * 15937.9876).fract();
+  // Map [0,1) -> [-1,1]
+  Vec3::new(r1 * 2.0 - 1.0, r2 * 2.0 - 1.0, r3 * 2.0 - 1.0)
 }
 
 pub fn vertex_shader(vertex: &Vertex, uniforms: &Uniforms) -> Vertex {
@@ -205,31 +224,34 @@ pub fn planet_shader_gas(pos: Vec3, normal: Vec3) -> Vec3 {
 /// Rocky planet shader: stratified rock, regolith and cracks with lambertian lighting
 pub fn planet_shader_rock(pos: Vec3, normal: Vec3) -> Vec3 {
   let n = normal.normalize();
+  let seed_vec = noise_seed_vec3();
+  // Seeded position for noise domain warp (keeps shape, changes patterns)
+  let p = pos + seed_vec * 12.3;
 
   // Isotropic trig-noise helpers
   let v1 = Vec3::new(0.36, 0.93, 0.04).normalize();
   let v2 = Vec3::new(0.79, -0.61, 0.08).normalize();
   let v3 = Vec3::new(-0.49, 0.12, 0.86).normalize();
 
-  let f1 = (glm::dot(&pos, &v1) * 0.25).sin();
-  let f2 = (glm::dot(&pos, &v2) * 0.55).sin();
-  let f3 = (glm::dot(&pos, &v3) * 1.10).sin();
+  let f1 = (glm::dot(&p, &v1) * 0.25).sin();
+  let f2 = (glm::dot(&p, &v2) * 0.55).sin();
+  let f3 = (glm::dot(&p, &v3) * 1.10).sin();
   let noise_base = (0.55 * f1 + 0.3 * f2 + 0.15 * f3) * 0.5 + 0.5; // [0,1]
 
   // Multi-frequency for height/roughness
-  let f4 = (glm::dot(&pos, &v1) * 2.0).sin().abs();
-  let f5 = (glm::dot(&pos, &v2) * 3.3).sin().abs();
-  let f6 = (glm::dot(&pos, &v3) * 5.1).sin().abs();
+  let f4 = (glm::dot(&p, &v1) * 2.0).sin().abs();
+  let f5 = (glm::dot(&p, &v2) * 3.3).sin().abs();
+  let f6 = (glm::dot(&p, &v3) * 5.1).sin().abs();
   let height = (0.5 * noise_base + 0.3 * f4 + 0.2 * (0.5 * f5 + 0.5 * f6)).clamp(0.0, 1.0);
 
   // Strata bands along a direction
-  let sdir = (v1 + v2 * 0.3 + v3 * 0.2).normalize();
-  let strata_raw = (glm::dot(&pos, &sdir) * 0.6).sin().abs();
+  let sdir = (v1 + v2 * 0.3 + v3 * 0.2 + seed_vec * 0.2).normalize();
+  let strata_raw = (glm::dot(&p, &sdir) * 0.6).sin().abs();
   let strata = strata_raw.powf(3.0); // thin bands
 
   // Crack network (thin dark lines)
-  let crack_a = ((glm::dot(&pos, &v1) * 6.5).sin() * (glm::dot(&pos, &v2) * 6.2).sin()).abs();
-  let crack_b = ((glm::dot(&pos, &v2) * 7.1).sin() * (glm::dot(&pos, &v3) * 7.4).sin()).abs();
+  let crack_a = ((glm::dot(&p, &v1) * 6.5).sin() * (glm::dot(&p, &v2) * 6.2).sin()).abs();
+  let crack_b = ((glm::dot(&p, &v2) * 7.1).sin() * (glm::dot(&p, &v3) * 7.4).sin()).abs();
   let cracks = (crack_a.min(crack_b)).powf(12.0).clamp(0.0, 1.0);
 
   // Base rocky palette
@@ -237,8 +259,10 @@ pub fn planet_shader_rock(pos: Vec3, normal: Vec3) -> Vec3 {
   let regolith = Vec3::new(0.38, 0.31, 0.22);
   let iron_oxide = Vec3::new(0.55, 0.32, 0.15);
 
-  // Blend materials
-  let dust_mask = (height * 0.9 + strata * 0.6).clamp(0.0, 1.0);
+  // Blend materials (add slope-based dust accumulation)
+  let up = if pos.magnitude() > 0.0 { pos / pos.magnitude() } else { Vec3::new(0.0, 1.0, 0.0) };
+  let slope = (1.0 - glm::dot(&n, &up)).clamp(0.0, 1.0); // steep -> 1, flat -> 0
+  let dust_mask = (height * 0.7 + strata * 0.5 + (1.0 - slope) * 0.6).clamp(0.0, 1.0);
   let iron_mask = ((noise_base - 0.6) / 0.25).clamp(0.0, 1.0);
   let mut albedo = basalt * (1.0 - dust_mask) + regolith * dust_mask;
   albedo = albedo * (1.0 - iron_mask) + iron_oxide * iron_mask;
@@ -247,12 +271,51 @@ pub fn planet_shader_rock(pos: Vec3, normal: Vec3) -> Vec3 {
   albedo *= 1.0 - (cracks * 0.6);
 
   // Micro roughness modulation
-  let micro = ((glm::dot(&pos, &v1) * 9.0).sin() * (glm::dot(&pos, &v2) * 11.0).cos()).abs() * 0.2;
+  let micro = ((glm::dot(&p, &v1) * 9.0).sin() * (glm::dot(&p, &v2) * 11.0).cos()).abs() * 0.2;
   let mut color = albedo * (1.0 - 0.15) + albedo * micro;
 
   // Ambient occlusion-like darkening using (1 - height)
   let ao = (1.0 - height).clamp(0.0, 1.0);
   color *= 1.0 - 0.35 * ao;
+
+  // Procedural craters (sparse), using cell hash and spherical distance
+  let cscale = 0.06; // crater density; higher -> fewer cells per unit
+  let cx = (p.x * cscale).floor();
+  let cy = (p.y * cscale).floor();
+  let cz = (p.z * cscale).floor();
+  let cell = Vec3::new(cx, cy, cz);
+  // Hash helpers to get pseudo-random in [0,1)
+  let h1 = {
+    let d = glm::dot(&cell, &Vec3::new(12.9898, 78.233, 37.719)) + seed_vec.x * 97.0;
+    let s = (d).sin() * 43758.5453;
+    s - s.floor()
+  };
+  let h2 = {
+    let d = glm::dot(&cell, &Vec3::new(93.989, 67.345, 24.123)) + seed_vec.y * 73.0;
+    let s = (d).sin() * 12753.5453;
+    s - s.floor()
+  };
+  let h3 = {
+    let d = glm::dot(&cell, &Vec3::new(53.786, 12.345, 91.532)) + seed_vec.z * 59.0;
+    let s = (d).sin() * 31837.1234;
+    s - s.floor()
+  };
+  // Only place a crater in some cells
+  if h1 > 0.88 {
+    let off = Vec3::new(h1 - 0.5, h2 - 0.5, h3 - 0.5) * (1.0 / cscale);
+    let center = (cell / cscale) + off;
+    let pn = if pos.magnitude() > 0.0 { pos / pos.magnitude() } else { n };
+    let cn = if center.magnitude() > 0.0 { center / center.magnitude() } else { n };
+    let ang = (glm::dot(&pn, &cn)).clamp(-1.0, 1.0).acos(); // radians
+    let w = 0.045 + h2 * 0.02; // crater angular radius
+    let t = (1.0 - (ang / w)).clamp(0.0, 1.0);
+    let bowl = t * t; // inside darkening
+    let rim = (1.0 - ((ang - w * 0.85).abs() / (w * 0.25)).clamp(0.0, 1.0)).powf(4.0);
+    let crater_dark = bowl * 0.22;
+    let rim_bright = rim * 0.08;
+    color *= 1.0 - crater_dark;
+    color += Vec3::new(0.25, 0.22, 0.18) * rim_bright; // slightly warmer rim
+  }
 
   // Lighting: rough rock, low specular
   let light_dir = Vec3::new(0.6, 0.7, 0.3).normalize();
@@ -300,9 +363,9 @@ pub fn planet_shader_sun(pos: Vec3, normal: Vec3) -> Vec3 {
   color += base * flicker;
 
   // Procedural granulation (isotropic, avoids axis-aligned banding)
-  let g1 = ((glm::dot(&p, &v1) * 0.8).sin().abs());
-  let g2 = ((glm::dot(&p, &v2) * 1.2).sin().abs());
-  let g3 = ((glm::dot(&p, &v3) * 1.6).sin().abs());
+  let g1 = (glm::dot(&p, &v1) * 0.8).sin().abs();
+  let g2 = (glm::dot(&p, &v2) * 1.2).sin().abs();
+  let g3 = (glm::dot(&p, &v3) * 1.6).sin().abs();
   let gran = (0.5 * g1 + 0.3 * g2 + 0.2 * g3).clamp(0.0, 1.0);
   // Center around 1.0 with small variance: 0.85..1.10
   let gran_amp = 0.25; // how much granulation affects

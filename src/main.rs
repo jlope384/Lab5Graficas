@@ -16,7 +16,7 @@ use framebuffer::Framebuffer;
 use vertex::Vertex;
 use obj::Obj;
 use triangle::triangle;
-use shaders::{vertex_shader, set_shader_index};
+use shaders::{vertex_shader, set_shader_index, set_noise_seed};
 
 
 pub struct Uniforms {
@@ -119,6 +119,12 @@ fn main() {
     window.update();
 
     framebuffer.set_background_color(0x333355);
+
+    // Seed procedural randomness once per run
+    if let Ok(now) = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH) {
+        let nanos = (now.as_nanos() & 0xFFFF_FFFF) as u32;
+        set_noise_seed(nanos);
+    }
 
     // Initial transform: move the model to the center of the window and set
     // a smaller scale so the camera appears a bit further from the object by default.
