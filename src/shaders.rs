@@ -143,10 +143,73 @@ pub fn planet_shader_warm(pos: Vec3, normal: Vec3) -> Vec3 {
   c
 }
 
+/// Rocky planet shader: stratified rock, regolith and cracks with lambertian lighting
+pub fn planet_shader_rock(pos: Vec3, normal: Vec3) -> Vec3 {
+  let n = normal.normalize();
+
+  // Isotropic trig-noise helpers
+  let v1 = Vec3::new(0.36, 0.93, 0.04).normalize();
+  let v2 = Vec3::new(0.79, -0.61, 0.08).normalize();
+  let v3 = Vec3::new(-0.49, 0.12, 0.86).normalize();
+
+  let f1 = (glm::dot(&pos, &v1) * 0.25).sin();
+  let f2 = (glm::dot(&pos, &v2) * 0.55).sin();
+  let f3 = (glm::dot(&pos, &v3) * 1.10).sin();
+  let noise_base = (0.55 * f1 + 0.3 * f2 + 0.15 * f3) * 0.5 + 0.5; // [0,1]
+
+  // Multi-frequency for height/roughness
+  let f4 = (glm::dot(&pos, &v1) * 2.0).sin().abs();
+  let f5 = (glm::dot(&pos, &v2) * 3.3).sin().abs();
+  let f6 = (glm::dot(&pos, &v3) * 5.1).sin().abs();
+  let height = (0.5 * noise_base + 0.3 * f4 + 0.2 * (0.5 * f5 + 0.5 * f6)).clamp(0.0, 1.0);
+
+  // Strata bands along a direction
+  let sdir = (v1 + v2 * 0.3 + v3 * 0.2).normalize();
+  let strata_raw = (glm::dot(&pos, &sdir) * 0.6).sin().abs();
+  let strata = strata_raw.powf(3.0); // thin bands
+
+  // Crack network (thin dark lines)
+  let crack_a = ((glm::dot(&pos, &v1) * 6.5).sin() * (glm::dot(&pos, &v2) * 6.2).sin()).abs();
+  let crack_b = ((glm::dot(&pos, &v2) * 7.1).sin() * (glm::dot(&pos, &v3) * 7.4).sin()).abs();
+  let cracks = (crack_a.min(crack_b)).powf(12.0).clamp(0.0, 1.0);
+
+  // Base rocky palette
+  let basalt = Vec3::new(0.12, 0.10, 0.09);
+  let regolith = Vec3::new(0.38, 0.31, 0.22);
+  let iron_oxide = Vec3::new(0.55, 0.32, 0.15);
+
+  // Blend materials
+  let dust_mask = (height * 0.9 + strata * 0.6).clamp(0.0, 1.0);
+  let iron_mask = ((noise_base - 0.6) / 0.25).clamp(0.0, 1.0);
+  let mut albedo = basalt * (1.0 - dust_mask) + regolith * dust_mask;
+  albedo = albedo * (1.0 - iron_mask) + iron_oxide * iron_mask;
+
+  // Apply cracks as dark lines (subtractive)
+  albedo *= 1.0 - (cracks * 0.6);
+
+  // Micro roughness modulation
+  let micro = ((glm::dot(&pos, &v1) * 9.0).sin() * (glm::dot(&pos, &v2) * 11.0).cos()).abs() * 0.2;
+  let mut color = albedo * (1.0 - 0.15) + albedo * micro;
+
+  // Ambient occlusion-like darkening using (1 - height)
+  let ao = (1.0 - height).clamp(0.0, 1.0);
+  color *= 1.0 - 0.35 * ao;
+
+  // Lighting: rough rock, low specular
+  let light_dir = Vec3::new(0.6, 0.7, 0.3).normalize();
+  let lambert = glm::dot(&n, &light_dir).max(0.0);
+  let spec = lambert.powf(12.0) * 0.15; // rough highlight
+  let ambient = 0.22;
+  let lit = ambient + 0.95 * lambert + spec;
+  color *= lit;
+
+  Vec3::new(color.x.clamp(0.0, 1.0), color.y.clamp(0.0, 1.0), color.z.clamp(0.0, 1.0))
+}
+
 /// Generic shade entry — dispatches to the selected shader variant.
 pub fn shade(pos: Vec3, normal: Vec3) -> Vec3 {
   match get_shader_index() {
-    1 => planet_shader_cool(pos, normal),
+    1 => planet_shader_rock(pos, normal),
     2 => planet_shader_sun(pos, normal),
     _ => planet_shader(pos, normal),
   }
