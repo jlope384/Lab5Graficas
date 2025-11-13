@@ -40,14 +40,6 @@ cargo run --release
 - `src/main.rs`: Loop principal, entrada de teclado y seeding inicial.
 - `assets/models/planetaff.obj`: Modelo base usado para todos los planetas.
 
-## Cómo Capturar Imágenes
-1. Ejecuta el programa y selecciona cada planeta (1, 2, 3).
-2. Ajusta rotación y zoom para un encuadre claro.
-3. Usa Windows: `Win + Shift + S` para recortar la ventana.
-4. Guarda las capturas en `docs/images/` (crea la carpeta si no existe).
-
-## Placeholders para Imágenes
-Inserta aquí las tres imágenes (reemplaza las rutas cuando las tengas):
 
 ### Planeta Gaseoso
 ![Gas Giant Placeholder](docs/images/gaseoso.png)
@@ -70,8 +62,3 @@ Inserta aquí las tres imágenes (reemplaza las rutas cuando las tengas):
 - Animación de rotación automática y variación temporal del ruido.
 - Exportar frame a archivo (PNG) usando `image` crate.
 
-## Licencia
-(Si necesitas licencia, indícala aquí. Actualmente no se establece ninguna explícita.)
-
----
-Añade tus capturas en la sección de imágenes antes de entregar el laboratorio.
