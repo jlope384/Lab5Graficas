@@ -1,7 +1,8 @@
 use nalgebra_glm::{Mat4, Vec3};
-use minifb::{Key, Window, WindowOptions};
+use minifb::{Key, KeyRepeat, Window, WindowOptions};
 use std::f32::consts::PI;
 use std::time::{Duration, Instant};
+use rand::{thread_rng, Rng};
 
 mod framebuffer;
 mod triangle;
@@ -20,6 +21,14 @@ use shaders::{get_shader_index, set_light_direction, set_light_intensity, set_no
 
 const DEFAULT_SCALE: f32 = 4.5;
 const SOLAR_SYSTEM_SCALE: f32 = DEFAULT_SCALE * 0.25;
+const WARP_RADIUS_MIN: f32 = 250.0;
+const WARP_RADIUS_MAX: f32 = 2400.0;
+const WARP_CHARGE_DURATION_MS: u64 = 450;
+struct WarpSequence {
+    pending_offset: Vec3,
+    started_at: Instant,
+}
+
 
 struct PlanetInstance {
     translation: Vec3,
@@ -323,6 +332,8 @@ fn main() {
     let mut scale = DEFAULT_SCALE * 0.15;
     let mut solar_zoom = 1.0;
     let mut solar_system_mode = true;
+    let warp_charge_duration = Duration::from_millis(WARP_CHARGE_DURATION_MS);
+    let mut active_warp: Option<WarpSequence> = None;
 
     let obj = Obj::load("assets/models/planetaff.obj").expect("Failed to load obj");
     let vertex_arrays = obj.get_vertex_array();
@@ -343,6 +354,30 @@ fn main() {
             &mut solar_system_mode,
             &mut solar_zoom,
         );
+
+        for key in window.get_keys_pressed(KeyRepeat::No) {
+            if key == Key::Space && active_warp.is_none() {
+                active_warp = Some(WarpSequence {
+                    pending_offset: random_warp_offset(),
+                    started_at: Instant::now(),
+                });
+            }
+        }
+
+        let warp_ready = active_warp
+            .as_ref()
+            .map_or(false, |event| event.started_at.elapsed() >= warp_charge_duration);
+
+        if warp_ready {
+            if let Some(completed) = active_warp.take() {
+                camera_offset = completed.pending_offset;
+            }
+        }
+
+        let warp_overlay_progress = active_warp.as_ref().map(|event| {
+            let elapsed = event.started_at.elapsed();
+            (elapsed.as_secs_f32() / warp_charge_duration.as_secs_f32()).clamp(0.0, 1.0)
+        });
 
         framebuffer.clear();
         let elapsed = start_time.elapsed().as_secs_f32();
@@ -373,6 +408,10 @@ fn main() {
 
             framebuffer.set_current_color(0xFFDDDD);
             render(&mut framebuffer, &uniforms, &vertex_arrays);
+        }
+
+        if let Some(progress) = warp_overlay_progress {
+            draw_warp_overlay(&mut framebuffer, progress);
         }
 
         window
@@ -407,6 +446,42 @@ fn render_camera_ship(
     render(framebuffer, &uniforms, ship_vertices);
 
     set_shader_index(previous_shader);
+}
+
+fn random_warp_offset() -> Vec3 {
+    let mut rng = thread_rng();
+    let radius = rng.gen_range(WARP_RADIUS_MIN..WARP_RADIUS_MAX);
+    let angle = rng.gen_range(0.0..(2.0 * PI));
+    let vertical = rng.gen_range(-480.0..480.0);
+    Vec3::new(radius * angle.cos(), vertical, 0.0)
+}
+
+fn draw_warp_overlay(framebuffer: &mut Framebuffer, progress: f32) {
+    let width = framebuffer.width as i32;
+    let height = framebuffer.height as i32;
+    let center_x = width as f32 * 0.5;
+    let center_y = height as f32 * 0.5;
+    let max_radius = center_x.max(center_y);
+    let pulse = (progress * PI).sin().abs();
+    let intensity = (0.35 + progress * 0.65).clamp(0.0, 1.0);
+
+    for y in 0..height {
+        for x in 0..width {
+            let fx = x as f32 - center_x;
+            let fy = y as f32 - center_y;
+            let distance = (fx * fx + fy * fy).sqrt();
+            let normalized = (distance / max_radius).clamp(0.0, 1.0);
+            let streak = ((fx * 0.045).sin().abs() + (fy * 0.032).cos().abs()) * 0.5;
+            let flare = (1.0 - normalized.powf(0.7)) * 0.85;
+            let glow = (streak * 0.55 + flare) * intensity + pulse * 0.4;
+
+            let r = (40.0 + glow * 90.0).clamp(0.0, 255.0) as u32;
+            let g = (110.0 + glow * 110.0).clamp(0.0, 255.0) as u32;
+            let b = (180.0 + glow * 160.0).clamp(0.0, 255.0) as u32;
+            let color = (r << 16) | (g << 8) | b;
+            framebuffer.set_pixel_raw(x as usize, y as usize, color);
+        }
+    }
 }
 
 fn handle_input(
