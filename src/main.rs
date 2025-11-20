@@ -19,6 +19,7 @@ use vertex::Vertex;
 use shaders::{set_noise_seed, set_shader_index, vertex_shader};
 
 const DEFAULT_SCALE: f32 = 4.5;
+const SOLAR_SYSTEM_SCALE: f32 = DEFAULT_SCALE * 0.15;
 
 struct PlanetInstance {
     translation: Vec3,
@@ -136,9 +137,11 @@ fn render_solar_system(
     default_translation: Vec3,
     scale: f32,
     orbit_time: f32,
+    solar_zoom: f32,
 ) {
     let view_offset = default_translation - camera_offset;
-    let scale_factor = scale / DEFAULT_SCALE;
+    let zoomed_scale = scale * solar_zoom;
+    let scale_factor = zoomed_scale / DEFAULT_SCALE;
     let sun_scale = 8.0;
     let gas_scale = 5.0;
     let rock_scale = 3.2;
@@ -170,7 +173,7 @@ fn render_solar_system(
 
     for planet in planets.iter() {
         set_shader_index(planet.shader_idx);
-        let rotated_translation = rotate_vec3(planet.translation, base_rotation);
+        let rotated_translation = rotate_vec3(planet.translation * solar_zoom, base_rotation);
         let model_matrix = create_model_matrix(
             rotated_translation + view_offset,
             planet.scale * scale_factor,
@@ -211,6 +214,7 @@ fn main() {
     let mut camera_offset = Vec3::new(0.0, 0.0, 0.0);
     let mut rotation = Vec3::new(0.0, 0.0, 0.0);
     let mut scale = DEFAULT_SCALE * 0.15;
+    let mut solar_zoom = 1.0;
     let mut solar_system_mode = true;
 
     let obj = Obj::load("assets/models/planetaff.obj").expect("Failed to load obj");
@@ -228,6 +232,7 @@ fn main() {
             &mut rotation,
             &mut scale,
             &mut solar_system_mode,
+            &mut solar_zoom,
         );
 
         framebuffer.clear();
@@ -240,8 +245,9 @@ fn main() {
                 rotation,
                 camera_offset,
                 default_translation,
-                scale,
+                SOLAR_SYSTEM_SCALE,
                 orbit_time,
+                solar_zoom,
             );
         } else {
             let model_matrix = create_model_matrix(default_translation - camera_offset, scale, rotation);
@@ -265,6 +271,7 @@ fn handle_input(
     rotation: &mut Vec3,
     scale: &mut f32,
     solar_system_mode: &mut bool,
+    solar_zoom: &mut f32,
 ) {
     // WASD-style translation (also keep arrow keys for convenience)
     if window.is_key_down(Key::Right) || window.is_key_down(Key::D) {
@@ -279,12 +286,20 @@ fn handle_input(
     if window.is_key_down(Key::Down) || window.is_key_down(Key::S) {
         camera_offset.y += 10.0;
     }
-    // Optional zoom mapped to Z/X so WASD stays for movement
-    if window.is_key_down(Key::Z) {
-        *scale *= 1.08;
-    }
-    if window.is_key_down(Key::X) {
-        *scale *= 0.92;
+    if *solar_system_mode {
+        if window.is_key_down(Key::Z) {
+            *solar_zoom *= 1.08;
+        }
+        if window.is_key_down(Key::X) {
+            *solar_zoom *= 0.92;
+        }
+    } else {
+        if window.is_key_down(Key::Z) {
+            *scale *= 1.08;
+        }
+        if window.is_key_down(Key::X) {
+            *scale *= 0.92;
+        }
     }
     if window.is_key_down(Key::Q) {
         rotation.x -= PI / 10.0;
