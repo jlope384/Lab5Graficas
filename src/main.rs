@@ -1,7 +1,7 @@
-use nalgebra_glm::{Vec3, Mat4};
+use nalgebra_glm::{Mat4, Vec3};
 use minifb::{Key, Window, WindowOptions};
-use std::time::Duration;
 use std::f32::consts::PI;
+use std::time::{Duration, Instant};
 
 mod framebuffer;
 mod triangle;
@@ -13,11 +13,19 @@ mod fragment;
 mod shaders;
 
 use framebuffer::Framebuffer;
-use vertex::Vertex;
 use obj::Obj;
 use triangle::triangle;
-use shaders::{vertex_shader, set_shader_index, set_noise_seed};
+use vertex::Vertex;
+use shaders::{set_noise_seed, set_shader_index, vertex_shader};
 
+const DEFAULT_SCALE: f32 = 4.5;
+
+struct PlanetInstance {
+    translation: Vec3,
+    rotation: Vec3,
+    scale: f32,
+    shader_idx: usize,
+}
 
 pub struct Uniforms {
     model_matrix: Mat4,
@@ -29,47 +37,45 @@ fn create_model_matrix(translation: Vec3, scale: f32, rotation: Vec3) -> Mat4 {
     let (sin_z, cos_z) = rotation.z.sin_cos();
 
     let rotation_matrix_x = Mat4::new(
-        1.0,  0.0,    0.0,   0.0,
-        0.0,  cos_x, -sin_x, 0.0,
-        0.0,  sin_x,  cos_x, 0.0,
-        0.0,  0.0,    0.0,   1.0,
+        1.0, 0.0, 0.0, 0.0,
+        0.0, cos_x, -sin_x, 0.0,
+        0.0, sin_x, cos_x, 0.0,
+        0.0, 0.0, 0.0, 1.0,
     );
 
     let rotation_matrix_y = Mat4::new(
-        cos_y,  0.0,  sin_y, 0.0,
-        0.0,    1.0,  0.0,   0.0,
-        -sin_y, 0.0,  cos_y, 0.0,
-        0.0,    0.0,  0.0,   1.0,
+        cos_y, 0.0, sin_y, 0.0,
+        0.0, 1.0, 0.0, 0.0,
+        -sin_y, 0.0, cos_y, 0.0,
+        0.0, 0.0, 0.0, 1.0,
     );
 
     let rotation_matrix_z = Mat4::new(
         cos_z, -sin_z, 0.0, 0.0,
-        sin_z,  cos_z, 0.0, 0.0,
-        0.0,    0.0,  1.0, 0.0,
-        0.0,    0.0,  0.0, 1.0,
+        sin_z, cos_z, 0.0, 0.0,
+        0.0, 0.0, 1.0, 0.0,
+        0.0, 0.0, 0.0, 1.0,
     );
 
     let rotation_matrix = rotation_matrix_z * rotation_matrix_y * rotation_matrix_x;
 
     let transform_matrix = Mat4::new(
-        scale, 0.0,   0.0,   translation.x,
-        0.0,   scale, 0.0,   translation.y,
-        0.0,   0.0,   scale, translation.z,
-        0.0,   0.0,   0.0,   1.0,
+        scale, 0.0, 0.0, translation.x,
+        0.0, scale, 0.0, translation.y,
+        0.0, 0.0, scale, translation.z,
+        0.0, 0.0, 0.0, 1.0,
     );
 
     transform_matrix * rotation_matrix
 }
 
 fn render(framebuffer: &mut Framebuffer, uniforms: &Uniforms, vertex_array: &[Vertex]) {
-    // Vertex Shader Stage
     let mut transformed_vertices = Vec::with_capacity(vertex_array.len());
     for vertex in vertex_array {
         let transformed = vertex_shader(vertex, uniforms);
         transformed_vertices.push(transformed);
     }
 
-    // Primitive Assembly Stage
     let mut triangles = Vec::new();
     for i in (0..transformed_vertices.len()).step_by(3) {
         if i + 2 < transformed_vertices.len() {
@@ -81,13 +87,11 @@ fn render(framebuffer: &mut Framebuffer, uniforms: &Uniforms, vertex_array: &[Ve
         }
     }
 
-    // Rasterization Stage
     let mut fragments = Vec::new();
     for tri in &triangles {
         fragments.extend(triangle(&tri[0], &tri[1], &tri[2]));
     }
 
-    // Fragment Processing Stage
     for fragment in fragments {
         let x = fragment.position.x as usize;
         let y = fragment.position.y as usize;
@@ -96,6 +100,58 @@ fn render(framebuffer: &mut Framebuffer, uniforms: &Uniforms, vertex_array: &[Ve
             framebuffer.set_current_color(color);
             framebuffer.point(x, y, fragment.depth);
         }
+    }
+}
+
+fn render_solar_system(
+    framebuffer: &mut Framebuffer,
+    vertex_array: &[Vertex],
+    base_rotation: Vec3,
+    camera_offset: Vec3,
+    default_translation: Vec3,
+    scale: f32,
+    orbit_time: f32,
+) {
+    let view_offset = default_translation - camera_offset;
+    let scale_factor = scale / DEFAULT_SCALE;
+    let sun_scale = 8.0;
+    let gas_scale = 5.0;
+    let rock_scale = 3.2;
+    let gas_radius = 170.0;
+    let rock_radius = 250.0;
+    let gas_angle = orbit_time * 0.35;
+    let rock_angle = orbit_time * 0.55;
+
+    let planets = [
+        PlanetInstance {
+            translation: Vec3::new(0.0, 0.0, 0.0),
+            rotation: Vec3::new(0.0, 0.0, 0.0),
+            scale: sun_scale,
+            shader_idx: 2,
+        },
+        PlanetInstance {
+            translation: Vec3::new(gas_radius * gas_angle.cos(), gas_radius * gas_angle.sin() * 0.75, 0.0),
+            rotation: Vec3::new(0.05, 0.15, 0.0),
+            scale: gas_scale,
+            shader_idx: 0,
+        },
+        PlanetInstance {
+            translation: Vec3::new(rock_radius * rock_angle.cos(), rock_radius * rock_angle.sin() * 0.9, 0.0),
+            rotation: Vec3::new(-0.08, 0.35, 0.0),
+            scale: rock_scale,
+            shader_idx: 1,
+        },
+    ];
+
+    for planet in planets.iter() {
+        set_shader_index(planet.shader_idx);
+        let model_matrix = create_model_matrix(
+            planet.translation + view_offset,
+            planet.scale * scale_factor,
+            base_rotation + planet.rotation,
+        );
+        let uniforms = Uniforms { model_matrix };
+        render(framebuffer, &uniforms, vertex_array);
     }
 }
 
@@ -118,41 +174,56 @@ fn main() {
     window.set_position(500, 200);
     window.update();
 
-    // Fondo negro para el render
     framebuffer.set_background_color(0x000000);
 
-    // Seed procedural randomness once per run
     if let Ok(now) = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH) {
         let nanos = (now.as_nanos() & 0xFFFF_FFFF) as u32;
         set_noise_seed(nanos);
     }
 
-    // Initial transform: move the model to the center of the window and set
-    // a smaller scale so the camera appears a bit further from the object by default.
-    let mut translation = Vec3::new(300.0, 200.0, 0.0);
+    let default_translation = Vec3::new(300.0, 200.0, 0.0);
+    let mut camera_offset = Vec3::new(0.0, 0.0, 0.0);
     let mut rotation = Vec3::new(0.0, 0.0, 0.0);
-    // Reduced initial scale (was 100.0, previously set to 50.0 and then 25.0)
-    // to make the object appear even smaller / further away on start.
-    // Lower this value to move the camera further away from the object.
-    let mut scale = 4.5f32;
+    let mut scale = DEFAULT_SCALE * 0.15;
+    let mut solar_system_mode = false;
 
     let obj = Obj::load("assets/models/planetaff.obj").expect("Failed to load obj");
-    let vertex_arrays = obj.get_vertex_array(); 
+    let vertex_arrays = obj.get_vertex_array();
+    let start_time = Instant::now();
 
     while window.is_open() {
         if window.is_key_down(Key::Escape) {
             break;
         }
 
-        handle_input(&window, &mut translation, &mut rotation, &mut scale);
+        handle_input(
+            &window,
+            &mut camera_offset,
+            &mut rotation,
+            &mut scale,
+            &mut solar_system_mode,
+        );
 
         framebuffer.clear();
 
-        let model_matrix = create_model_matrix(translation, scale, rotation);
-        let uniforms = Uniforms { model_matrix };
+        if solar_system_mode {
+            let orbit_time = start_time.elapsed().as_secs_f32();
+            render_solar_system(
+                &mut framebuffer,
+                &vertex_arrays,
+                rotation,
+                camera_offset,
+                default_translation,
+                scale,
+                orbit_time,
+            );
+        } else {
+            let model_matrix = create_model_matrix(default_translation - camera_offset, scale, rotation);
+            let uniforms = Uniforms { model_matrix };
 
-        framebuffer.set_current_color(0xFFDDDD);
-        render(&mut framebuffer, &uniforms, &vertex_arrays);
+            framebuffer.set_current_color(0xFFDDDD);
+            render(&mut framebuffer, &uniforms, &vertex_arrays);
+        }
 
         window
             .update_with_buffer(&framebuffer.buffer, framebuffer_width, framebuffer_height)
@@ -162,31 +233,37 @@ fn main() {
     }
 }
 
-fn handle_input(window: &Window, translation: &mut Vec3, rotation: &mut Vec3, scale: &mut f32) {
-    if window.is_key_down(Key::Right) {
-        translation.x += 10.0;
+fn handle_input(
+    window: &Window,
+    camera_offset: &mut Vec3,
+    rotation: &mut Vec3,
+    scale: &mut f32,
+    solar_system_mode: &mut bool,
+) {
+    // WASD-style translation (also keep arrow keys for convenience)
+    if window.is_key_down(Key::Right) || window.is_key_down(Key::D) {
+        camera_offset.x += 10.0;
     }
-    if window.is_key_down(Key::Left) {
-        translation.x -= 10.0;
+    if window.is_key_down(Key::Left) || window.is_key_down(Key::A) {
+        camera_offset.x -= 10.0;
     }
-    if window.is_key_down(Key::Up) {
-        translation.y -= 10.0;
+    if window.is_key_down(Key::Up) || window.is_key_down(Key::W) {
+        camera_offset.y -= 10.0;
     }
-    if window.is_key_down(Key::Down) {
-        translation.y += 10.0;
+    if window.is_key_down(Key::Down) || window.is_key_down(Key::S) {
+        camera_offset.y += 10.0;
     }
-    // Use multiplicative zoom so we can zoom out without hitting a hard lower bound.
-    // This avoids crossing zero and gives a smooth, effectively unbounded zoom out.
-    if window.is_key_down(Key::S) {
-        *scale *= 1.1; // zoom in
+    // Optional zoom mapped to Z/X so WASD stays for movement
+    if window.is_key_down(Key::Z) {
+        *scale *= 1.08;
     }
-    if window.is_key_down(Key::A) {
-        *scale *= 0.9; // zoom out
+    if window.is_key_down(Key::X) {
+        *scale *= 0.92;
     }
     if window.is_key_down(Key::Q) {
         rotation.x -= PI / 10.0;
     }
-    if window.is_key_down(Key::W) {
+    if window.is_key_down(Key::U) {
         rotation.x += PI / 10.0;
     }
     if window.is_key_down(Key::E) {
@@ -201,14 +278,20 @@ fn handle_input(window: &Window, translation: &mut Vec3, rotation: &mut Vec3, sc
     if window.is_key_down(Key::Y) {
         rotation.z += PI / 10.0;
     }
-    // Shader selection: press 1, 2 or 3 to pick the shader variant
+
     if window.is_key_down(Key::Key1) {
-        set_shader_index(0);
+        *solar_system_mode = true;
     }
     if window.is_key_down(Key::Key2) {
+        *solar_system_mode = false;
         set_shader_index(1);
     }
     if window.is_key_down(Key::Key3) {
+        *solar_system_mode = false;
         set_shader_index(2);
+    }
+    if window.is_key_down(Key::Key4) {
+        *solar_system_mode = false;
+        set_shader_index(0);
     }
 }

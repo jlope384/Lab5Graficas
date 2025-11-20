@@ -2,9 +2,10 @@
 
 Este proyecto genera tres tipos de planetas procedurales completamente en CPU usando Rust y `minifb`:
 
-1. Planeta Gaseoso (Key 1) – Bandas de nubes suaves en tonos crema, tan, ocre y azul-gris, con turbulencia y rim atmosférico.
+1. Sistema Solar (Key 1) – Renderiza los tres planetas simultáneamente con posiciones y escalas distintas.
 2. Planeta Rocoso (Key 2) – Estratos, polvo según pendiente, grietas, granulación y cráteres dispersos con patrón aleatorio por ejecución.
 3. Sol / Estrella (Key 3) – Emisión uniforme, turbulencia energética, manchas solares suavizadas y brillo sin sombras.
+4. Planeta Gaseoso (Key 4) – Bandas de nubes suaves en tonos crema, tan, ocre y azul-gris, con turbulencia y rim atmosférico.
 
 ## Características Técnicas
 - Pipeline manual: Vertex transform → ensamblado → rasterización → shading procedural per-fragment.
@@ -15,14 +16,15 @@ Este proyecto genera tres tipos de planetas procedurales completamente en CPU us
 ## Controles
 | Tecla | Acción |
 |-------|-------|
-| Flechas | Mover el modelo (X/Y en pantalla) |
-| A / S | Zoom out / Zoom in (escala) |
+| Flechas / WASD | Mover el modelo (X/Y en pantalla) |
+| Z / X | Zoom in / Zoom out |
 | Q / W | Rotar sobre eje X |
 | E / R | Rotar sobre eje Y |
 | T / Y | Rotar sobre eje Z |
-| 1 | Shader gaseoso |
+| 1 | Mostrar los tres planetas (modo sistema solar) |
 | 2 | Shader rocoso |
 | 3 | Sol |
+| 4 | Shader gaseoso |
 | Esc | Salir |
 
 ## Requisitos
