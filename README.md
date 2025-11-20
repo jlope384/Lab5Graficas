@@ -42,6 +42,9 @@ cargo run --release
 
 ## Galería rápida
 
+### Sistema solar
+![Solar System Placeholder](docs/images/solarsys.png)
+
 ### Planeta gaseoso
 ![Gas Giant Placeholder](docs/images/gaseoso.png)
 
