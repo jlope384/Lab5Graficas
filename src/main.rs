@@ -16,7 +16,7 @@ use framebuffer::Framebuffer;
 use obj::Obj;
 use triangle::triangle;
 use vertex::Vertex;
-use shaders::{set_noise_seed, set_shader_index, vertex_shader};
+use shaders::{set_light_direction, set_light_intensity, set_noise_seed, set_shader_index, vertex_shader};
 
 const DEFAULT_SCALE: f32 = 4.5;
 const SOLAR_SYSTEM_SCALE: f32 = DEFAULT_SCALE * 0.15;
@@ -26,6 +26,7 @@ struct PlanetInstance {
     rotation: Vec3,
     scale: f32,
     shader_idx: usize,
+    spin_speed: f32,
 }
 
 pub struct Uniforms {
@@ -149,18 +150,21 @@ fn render_solar_system(
     let cat_scale = 3.6;
     let bubble_scale = 4.3;
     let ice_scale = 4.8;
+    let giant_scale = 6.2;
     let rock_radius = 190.0;
     let cat_radius = 320.0;
     let cheese_radius = 470.0;
     let gas_radius = 780.0;
     let bubble_radius = 1020.0;
     let ice_radius = 1350.0;
-    let rock_angle = orbit_time * 0.75;
-    let cat_angle = orbit_time * 0.55;
-    let cheese_angle = orbit_time * 0.35;
-    let bubble_angle = orbit_time * 0.22;
-    let gas_angle = orbit_time * 0.16;
-    let ice_angle = orbit_time * 0.08;
+    let giant_radius = 1900.0;
+    let rock_angle = orbit_time * 0.25;
+    let cat_angle = orbit_time * 0.18;
+    let cheese_angle = orbit_time * 0.12;
+    let bubble_angle = orbit_time * 0.08;
+    let gas_angle = orbit_time * 0.05;
+    let ice_angle = orbit_time * 0.03;
+    let giant_angle = orbit_time * 0.015;
 
     let planets = [
         PlanetInstance {
@@ -168,57 +172,98 @@ fn render_solar_system(
             rotation: Vec3::new(0.0, 0.0, 0.0),
             scale: sun_scale,
             shader_idx: 2,
+            spin_speed: 0.0,
         },
         PlanetInstance {
             translation: Vec3::new(gas_radius * gas_angle.cos(), gas_radius * gas_angle.sin() * 0.65, 0.0),
             rotation: Vec3::new(0.05, 0.15, 0.0),
             scale: gas_scale,
             shader_idx: 0,
+            spin_speed: 0.15,
         },
         PlanetInstance {
             translation: Vec3::new(rock_radius * rock_angle.cos(), rock_radius * rock_angle.sin() * 0.9, 0.0),
             rotation: Vec3::new(-0.08, 0.35, 0.0),
             scale: rock_scale,
             shader_idx: 1,
+            spin_speed: 0.4,
         },
         PlanetInstance {
             translation: Vec3::new(cheese_radius * cheese_angle.cos(), cheese_radius * cheese_angle.sin() * 0.8, 0.0),
             rotation: Vec3::new(0.15, -0.22, 0.0),
             scale: cheese_scale,
             shader_idx: 3,
+            spin_speed: 0.25,
         },
         PlanetInstance {
             translation: Vec3::new(cat_radius * cat_angle.cos(), cat_radius * cat_angle.sin() * 0.75, 0.0),
             rotation: Vec3::new(-0.12, 0.18, 0.05),
             scale: cat_scale,
             shader_idx: 4,
+            spin_speed: 0.6,
         },
         PlanetInstance {
             translation: Vec3::new(bubble_radius * bubble_angle.cos(), bubble_radius * bubble_angle.sin() * 0.7, 0.0),
             rotation: Vec3::new(0.3, -0.1, 0.2),
             scale: bubble_scale,
             shader_idx: 5,
+            spin_speed: 0.2,
         },
         PlanetInstance {
             translation: Vec3::new(ice_radius * ice_angle.cos(), ice_radius * ice_angle.sin() * 0.85, 0.0),
             rotation: Vec3::new(-0.05, 0.12, -0.08),
             scale: ice_scale,
             shader_idx: 6,
+            spin_speed: 0.12,
+        },
+        PlanetInstance {
+            translation: Vec3::new(giant_radius * giant_angle.cos(), giant_radius * giant_angle.sin() * 0.8, 0.0),
+            rotation: Vec3::new(0.04, -0.18, 0.03),
+            scale: giant_scale,
+            shader_idx: 7,
+            spin_speed: 0.08,
         },
 
     ];
 
+    let sun_world = rotate_vec3(planets[0].translation, base_rotation);
+    let sun_pulse = 0.85 + (orbit_time * 0.7).sin() * 0.15;
+
     for planet in planets.iter() {
         set_shader_index(planet.shader_idx);
-        let rotated_translation = rotate_vec3(planet.translation * solar_zoom, base_rotation);
+        let planet_world = rotate_vec3(planet.translation, base_rotation);
+        let rotated_translation = planet_world * solar_zoom;
+        let mut light_vec = sun_world - planet_world;
+        let distance = light_vec.magnitude();
+        if distance < 1e-4 {
+            light_vec = Vec3::new(0.0, 0.0, 1.0);
+            set_light_direction(light_vec);
+            set_light_intensity(1.1 * sun_pulse);
+        } else {
+            let light_dir = light_vec / distance;
+            set_light_direction(light_dir);
+            let falloff = 650.0;
+            let attenuation = 1.0 / (1.0 + (distance / falloff).powi(2));
+            let intensity = (0.25 + attenuation * 0.9) * sun_pulse;
+            set_light_intensity(intensity);
+        }
+
+        let spin_angle = if planet.spin_speed.abs() > f32::EPSILON {
+            orbit_time * planet.spin_speed
+        } else {
+            0.0
+        };
+        let spin_rotation = Vec3::new(0.0, spin_angle, 0.0);
+
         let model_matrix = create_model_matrix(
             rotated_translation + view_offset,
             planet.scale * scale_factor,
-            base_rotation + planet.rotation,
+            base_rotation + planet.rotation + spin_rotation,
         );
         let uniforms = Uniforms { model_matrix };
         render(framebuffer, &uniforms, vertex_array);
     }
+
 }
 
 fn main() {
@@ -287,6 +332,8 @@ fn main() {
                 solar_zoom,
             );
         } else {
+            set_light_direction(Vec3::new(0.6, 0.7, 0.3).normalize());
+            set_light_intensity(1.0);
             let model_matrix = create_model_matrix(default_translation - camera_offset, scale, rotation);
             let uniforms = Uniforms { model_matrix };
 
@@ -387,5 +434,9 @@ fn handle_input(
     if window.is_key_down(Key::Key8) {
         *solar_system_mode = false;
         set_shader_index(6);
+    }
+    if window.is_key_down(Key::Key9) {
+        *solar_system_mode = false;
+        set_shader_index(7);
     }
 }

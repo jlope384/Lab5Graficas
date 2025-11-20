@@ -3,9 +3,12 @@ use crate::vertex::Vertex;
 use crate::Uniforms;
 use nalgebra_glm as glm;
 use std::sync::atomic::{AtomicUsize, AtomicU32, Ordering};
+use std::sync::Mutex;
 
 static CURRENT_SHADER: AtomicUsize = AtomicUsize::new(0);
 static NOISE_SEED: AtomicU32 = AtomicU32::new(0);
+static LIGHT_DIRECTION: Mutex<Vec3> = Mutex::new(Vec3::new(0.6, 0.7, 0.3));
+static LIGHT_INTENSITY: Mutex<f32> = Mutex::new(1.0);
 
 pub fn set_shader_index(idx: usize) {
   CURRENT_SHADER.store(idx, Ordering::Relaxed);
@@ -17,6 +20,37 @@ pub fn get_shader_index() -> usize {
 
 pub fn set_noise_seed(seed: u32) {
   NOISE_SEED.store(seed, Ordering::Relaxed);
+}
+
+pub fn set_light_direction(dir: Vec3) {
+  if let Ok(mut light) = LIGHT_DIRECTION.lock() {
+    let norm = dir.norm();
+    if norm > f32::EPSILON {
+      *light = dir / norm;
+    } else {
+      *light = Vec3::new(0.0, 0.0, 1.0);
+    }
+  }
+}
+
+pub fn set_light_intensity(intensity: f32) {
+  if let Ok(mut value) = LIGHT_INTENSITY.lock() {
+    *value = intensity.max(0.0);
+  }
+}
+
+fn get_light_direction() -> Vec3 {
+  LIGHT_DIRECTION
+    .lock()
+    .map(|v| *v)
+    .unwrap_or_else(|_| Vec3::new(0.0, 0.0, 1.0))
+}
+
+fn get_light_intensity() -> f32 {
+  LIGHT_INTENSITY
+    .lock()
+    .map(|v| *v)
+    .unwrap_or(1.0)
 }
 
 fn get_noise_seed() -> u32 {
@@ -131,11 +165,12 @@ pub fn planet_shader(pos: Vec3, normal: Vec3) -> Vec3 {
   color *= 0.6 + 0.9 * gradient;
 
   // Lighting: basic lambert + specular-like highlight (sharp)
-  let light_dir = Vec3::new(0.6, 0.7, 0.3).normalize();
+  let light_dir = get_light_direction();
   let lambert = glm::dot(&n, &light_dir).max(0.0);
   let spec = lambert.powf(60.0) * 1.4; // tight bright highlights
   let ambient = 0.18;
-  let lit = ambient + 1.0 * lambert + spec;
+    let intensity = get_light_intensity();
+    let lit = (ambient + lambert + spec) * intensity;
   color *= lit;
 
   // Rim glow to accentuate silhouettes (using normal's view-approx)
@@ -207,16 +242,20 @@ pub fn planet_shader_gas(pos: Vec3, normal: Vec3) -> Vec3 {
   color *= 1.0 + turb;
 
   // Soft lighting (clouds): mostly diffuse, low specular
-  let light_dir = Vec3::new(0.6, 0.7, 0.3).normalize();
+  let light_dir = get_light_direction();
   let lambert = glm::dot(&n, &light_dir).max(0.0);
   let spec = lambert.powf(8.0) * 0.05;
   let ambient = 0.35;
-  let lit = ambient + 0.7 * lambert + spec;
+  let intensity = get_light_intensity();
+  let lit = (ambient + 0.7 * lambert + spec) * intensity;
   color *= lit;
 
   // Gentle rim light to suggest atmospheric scattering
-  let rim = (1.0 - glm::dot(&n, &Vec3::new(0.0, 0.0, 1.0))).powf(2.2);
-  color += Vec3::new(0.12, 0.18, 0.24) * (rim * 0.18);
+  let view_dir = Vec3::new(0.0, 0.0, 1.0);
+  let rim = (1.0 - glm::dot(&n, &view_dir)).powf(2.2);
+  let forward = (glm::dot(&light_dir, &view_dir) * 0.5 + 0.5).clamp(0.0, 1.0).powf(1.3);
+  let atm = rim * (0.6 + 0.4 * forward);
+  color += Vec3::new(0.12, 0.18, 0.24) * (atm * 0.25);
 
   Vec3::new(color.x.clamp(0.0, 1.0), color.y.clamp(0.0, 1.0), color.z.clamp(0.0, 1.0))
 }
@@ -318,11 +357,12 @@ pub fn planet_shader_rock(pos: Vec3, normal: Vec3) -> Vec3 {
   }
 
   // Lighting: rough rock, low specular
-  let light_dir = Vec3::new(0.6, 0.7, 0.3).normalize();
+  let light_dir = get_light_direction();
   let lambert = glm::dot(&n, &light_dir).max(0.0);
   let spec = lambert.powf(12.0) * 0.15; // rough highlight
   let ambient = 0.22;
-  let lit = ambient + 0.95 * lambert + spec;
+  let intensity = get_light_intensity();
+  let lit = (ambient + 0.95 * lambert + spec) * intensity;
   color *= lit;
 
   Vec3::new(color.x.clamp(0.0, 1.0), color.y.clamp(0.0, 1.0), color.z.clamp(0.0, 1.0))
@@ -378,11 +418,12 @@ pub fn planet_shader_cheese(pos: Vec3, normal: Vec3) -> Vec3 {
   color -= Vec3::new(speckle_amt, speckle_amt, speckle_amt * 0.7);
 
   // Lighting: soft diffuse with mild specular to keep cheesy sheen
-  let light_dir = Vec3::new(0.5, 0.7, 0.4).normalize();
+  let light_dir = get_light_direction();
   let lambert = glm::dot(&n, &light_dir).max(0.0);
   let spec = lambert.powf(20.0) * 0.18;
   let ambient = 0.35;
-  color *= ambient + 0.9 * lambert;
+  let intensity = get_light_intensity();
+  color *= (ambient + 0.9 * lambert) * intensity;
   color += Vec3::new(0.45, 0.38, 0.25) * spec;
 
   Vec3::new(color.x.clamp(0.0, 1.0), color.y.clamp(0.0, 1.0), color.z.clamp(0.0, 1.0))
@@ -423,11 +464,12 @@ pub fn planet_shader_cat(pos: Vec3, normal: Vec3) -> Vec3 {
   color = color * (1.0 - pole * 0.5) + ear_color * (pole * 0.5);
 
   // Lighting: soft fur shading with mild specular
-  let light_dir = Vec3::new(0.5, 0.7, 0.4).normalize();
+  let light_dir = get_light_direction();
   let lambert = glm::dot(&n, &light_dir).max(0.0);
   let spec = lambert.powf(25.0) * 0.12;
   let ambient = 0.3;
-  color *= ambient + 0.9 * lambert;
+  let intensity = get_light_intensity();
+  color *= (ambient + 0.9 * lambert) * intensity;
   color += Vec3::new(1.0, 0.95, 0.9) * spec;
 
   Vec3::new(color.x.clamp(0.0, 1.0), color.y.clamp(0.0, 1.0), color.z.clamp(0.0, 1.0))
@@ -462,11 +504,12 @@ pub fn planet_shader_bubblegum(pos: Vec3, normal: Vec3) -> Vec3 {
   color += Vec3::new(0.35, 0.25, 0.65) * (rim * 0.5);
 
   // Lighting with glossy specular
-  let light_dir = Vec3::new(0.4, 0.75, 0.5).normalize();
+  let light_dir = get_light_direction();
   let lambert = glm::dot(&n, &light_dir).max(0.0);
   let spec = lambert.powf(40.0) * 0.4;
   let ambient = 0.25;
-  color *= ambient + 0.95 * lambert;
+  let intensity = get_light_intensity();
+  color *= (ambient + 0.95 * lambert) * intensity;
   color += Vec3::new(1.0, 0.9, 0.95) * spec;
 
   Vec3::new(color.x.clamp(0.0, 1.0), color.y.clamp(0.0, 1.0), color.z.clamp(0.0, 1.0))
@@ -500,16 +543,66 @@ pub fn planet_shader_ice(pos: Vec3, normal: Vec3) -> Vec3 {
   color += Vec3::new(0.4, 0.5, 0.6) * (sparkle * 0.4);
 
   // Lighting with icy specular
-  let light_dir = Vec3::new(0.45, 0.8, 0.4).normalize();
+  let light_dir = get_light_direction();
   let lambert = glm::dot(&n, &light_dir).max(0.0);
   let spec = lambert.powf(50.0) * 0.35;
   let ambient = 0.28;
-  color *= ambient + 0.95 * lambert;
+  let intensity = get_light_intensity();
+  color *= (ambient + 0.95 * lambert) * intensity;
+  let view_dir = Vec3::new(0.0, 0.0, 1.0);
+  let rim = (1.0 - glm::dot(&n, &view_dir)).powf(3.0);
+  let forward = (glm::dot(&light_dir, &view_dir) * 0.5 + 0.5).clamp(0.0, 1.0).powf(1.4);
+  let halo = rim * (0.5 + 0.5 * forward);
+  color += Vec3::new(0.2, 0.4, 0.6) * (halo * 0.35);
   color += Vec3::new(0.8, 0.9, 1.0) * spec;
 
   // Cold rim glow
   let rim = (1.0 - glm::dot(&n, &Vec3::new(0.0, 0.0, 1.0))).powf(2.8);
   color += Vec3::new(0.3, 0.55, 0.85) * (rim * 0.3);
+
+  Vec3::new(color.x.clamp(0.0, 1.0), color.y.clamp(0.0, 1.0), color.z.clamp(0.0, 1.0))
+}
+
+/// Steel-gray giant shader: layered metallic bands and subtle storms
+pub fn planet_shader_giant(pos: Vec3, normal: Vec3) -> Vec3 {
+  let n = normal.normalize();
+  let seed = noise_seed_vec3();
+  let p = pos + seed * 8.0;
+
+  let low_gray = Vec3::new(0.25, 0.26, 0.28);
+  let mid_gray = Vec3::new(0.45, 0.46, 0.5);
+  let high_gray = Vec3::new(0.72, 0.74, 0.78);
+
+  // Broad metallic bands
+  let latitude = n.y;
+  let band_base = (latitude * 8.0).sin() * 0.5 + 0.5;
+  let mut color = low_gray * (1.0 - band_base) + mid_gray * band_base;
+
+  // Secondary micro-bands offset by position
+  let micro = ((p.y * 5.5).sin() * (p.x * 3.7).cos()).abs();
+  let micro_mask = micro.powf(2.0);
+  color = color * (1.0 - micro_mask * 0.2) + high_gray * (micro_mask * 0.2);
+
+  // Storm ovals using trig noise
+  let oval = ((glm::dot(&p, &Vec3::new(0.7, 0.1, 0.6)) * 1.2).sin().abs()
+    * (glm::dot(&p, &Vec3::new(-0.3, 0.9, 0.2)) * 0.8).cos().abs()).powf(3.5);
+  color += Vec3::new(0.08, 0.08, 0.1) * oval;
+
+  // Subtle radial darkening towards poles
+  let pole = latitude.abs();
+  color *= 0.9 + 0.1 * (1.0 - pole);
+
+  let light_dir = get_light_direction();
+  let lambert = glm::dot(&n, &light_dir).max(0.0);
+  let spec = lambert.powf(24.0) * 0.25;
+  let ambient = 0.2;
+  let intensity = get_light_intensity();
+  color *= (ambient + 0.85 * lambert + spec) * intensity;
+
+  // Silvery rim scatter
+  let view_dir = Vec3::new(0.0, 0.0, 1.0);
+  let rim = (1.0 - glm::dot(&n, &view_dir)).powf(2.2);
+  color += Vec3::new(0.35, 0.37, 0.4) * (rim * 0.15);
 
   Vec3::new(color.x.clamp(0.0, 1.0), color.y.clamp(0.0, 1.0), color.z.clamp(0.0, 1.0))
 }
@@ -524,6 +617,7 @@ pub fn shade(pos: Vec3, normal: Vec3) -> Vec3 {
     4 => planet_shader_cat(pos, normal),
     5 => planet_shader_bubblegum(pos, normal),
     6 => planet_shader_ice(pos, normal),
+    7 => planet_shader_giant(pos, normal),
     _ => planet_shader_gas(pos, normal),
   }
 }
@@ -577,6 +671,9 @@ pub fn planet_shader_sun(pos: Vec3, normal: Vec3) -> Vec3 {
   // Add a soft rim/glow using normal vs view axis (additive only)
   let rim = (1.0 - glm::dot(&n, &Vec3::new(0.0, 0.0, 1.0))).powf(3.0);
   color += Vec3::new(1.0, 0.6, 0.25) * (rim * 0.2); // keep rim subtler for "less bright"
+
+  let emissive_boost = 0.7 + 0.6 * get_light_intensity();
+  color *= emissive_boost;
 
   // Tone mapping / clamp
   Vec3::new(color.x.min(1.0), color.y.min(1.0), color.z.min(1.0))
