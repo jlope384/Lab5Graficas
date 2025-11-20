@@ -146,12 +146,18 @@ fn render_solar_system(
     let gas_scale = 5.0;
     let rock_scale = 3.2;
     let cheese_scale = 4.0;
-    let gas_radius = 170.0;
-    let rock_radius = 250.0;
+    let cat_scale = 3.6;
+    let bubble_scale = 4.3;
+    let gas_radius = 720.0;
+    let rock_radius = 210.0;
     let cheese_radius = 420.0;
+    let cat_radius = 320.0;
+    let bubble_radius = 880.0;
     let gas_angle = orbit_time * 0.35;
     let rock_angle = orbit_time * 0.55;
     let cheese_angle = orbit_time * 0.22;
+    let cat_angle = orbit_time * 0.41;
+    let bubble_angle = orbit_time * 0.3;
 
     let planets = [
         PlanetInstance {
@@ -167,7 +173,7 @@ fn render_solar_system(
             shader_idx: 0,
         },
         PlanetInstance {
-            translation: Vec3::new(rock_radius * rock_angle.cos(), rock_radius * rock_angle.sin() * 0.9, 0.0),
+            translation: Vec3::new(rock_radius * rock_angle.cos(), rock_radius * rock_angle.sin() * 0.6, 0.0),
             rotation: Vec3::new(-0.08, 0.35, 0.0),
             scale: rock_scale,
             shader_idx: 1,
@@ -178,6 +184,19 @@ fn render_solar_system(
             scale: cheese_scale,
             shader_idx: 3,
         },
+        PlanetInstance {
+            translation: Vec3::new(cat_radius * cat_angle.cos(), cat_radius * cat_angle.sin() * 0.7, 0.0),
+            rotation: Vec3::new(-0.12, 0.18, 0.05),
+            scale: cat_scale,
+            shader_idx: 4,
+        },
+        PlanetInstance {
+            translation: Vec3::new(bubble_radius * bubble_angle.cos(), bubble_radius * bubble_angle.sin() * 0.55, 0.0),
+            rotation: Vec3::new(0.3, -0.1, 0.2),
+            scale: bubble_scale,
+            shader_idx: 5,
+        },
+
     ];
 
     for planet in planets.iter() {
@@ -347,5 +366,13 @@ fn handle_input(
     if window.is_key_down(Key::Key5) {
         *solar_system_mode = false;
         set_shader_index(3);
+    }
+    if window.is_key_down(Key::Key6) {
+        *solar_system_mode = false;
+        set_shader_index(4);
+    }
+    if window.is_key_down(Key::Key7) {
+        *solar_system_mode = false;
+        set_shader_index(5);
     }
 }

@@ -388,6 +388,90 @@ pub fn planet_shader_cheese(pos: Vec3, normal: Vec3) -> Vec3 {
   Vec3::new(color.x.clamp(0.0, 1.0), color.y.clamp(0.0, 1.0), color.z.clamp(0.0, 1.0))
 }
 
+/// Cat-inspired shader: soft fur gradients, stripes, and whisker-like highlights
+pub fn planet_shader_cat(pos: Vec3, normal: Vec3) -> Vec3 {
+  let n = normal.normalize();
+  let seed = noise_seed_vec3();
+  let p = pos + seed * 4.7;
+
+  // Base fur gradient (belly lighter, back darker)
+  let base_belly = Vec3::new(0.98, 0.92, 0.85);
+  let base_back = Vec3::new(0.55, 0.38, 0.25);
+  let vertical = (n.y * 0.5 + 0.5).clamp(0.0, 1.0);
+  let mut color = base_back * vertical + base_belly * (1.0 - vertical);
+
+  // Procedural stripes along longitude
+  let stripe_coord = (p.z * 2.6 + (p.x * 0.4).sin()).sin();
+  let stripe_mask = (stripe_coord.abs().powf(6.0)).clamp(0.0, 1.0);
+  let stripe_color = Vec3::new(0.3, 0.18, 0.12);
+  color = color * (1.0 - stripe_mask * 0.6) + stripe_color * (stripe_mask * 0.6);
+
+  // Fur noise for softness
+  let fur = ((p.x * 5.1).sin() * (p.y * 6.3).cos() * (p.z * 5.6).sin() + 1.0) * 0.5;
+  let fur_variation = (fur - 0.5) * 0.2;
+  color += Vec3::new(fur_variation * 0.7, fur_variation * 0.5, fur_variation * 0.4);
+
+  // Whisker arcs (thin bright curves crossing the face region)
+  let face_lat = (pos.y * 3.0).sin();
+  let whisker_curve = ((pos.x * 1.4 + face_lat * 0.8).sin() * (pos.z * 0.3).cos()).abs().powf(12.0);
+  let whisker_color = Vec3::new(1.0, 0.95, 0.88);
+  color = color * (1.0 - whisker_curve * 0.25) + whisker_color * (whisker_curve * 0.25);
+
+  // Ear tips (poles) darkening
+  let pole = n.y.abs().powf(3.0);
+  let ear_color = Vec3::new(0.25, 0.16, 0.12);
+  color = color * (1.0 - pole * 0.5) + ear_color * (pole * 0.5);
+
+  // Lighting: soft fur shading with mild specular
+  let light_dir = Vec3::new(0.5, 0.7, 0.4).normalize();
+  let lambert = glm::dot(&n, &light_dir).max(0.0);
+  let spec = lambert.powf(25.0) * 0.12;
+  let ambient = 0.3;
+  color *= ambient + 0.9 * lambert;
+  color += Vec3::new(1.0, 0.95, 0.9) * spec;
+
+  Vec3::new(color.x.clamp(0.0, 1.0), color.y.clamp(0.0, 1.0), color.z.clamp(0.0, 1.0))
+}
+
+/// Bubblegum shader: iridescent swirl bands and sparkly highlights
+pub fn planet_shader_bubblegum(pos: Vec3, normal: Vec3) -> Vec3 {
+  let n = normal.normalize();
+  let seed = noise_seed_vec3();
+  let p = pos + seed * 3.1;
+
+  // Base gradient shifting from magenta to cyan
+  let top = Vec3::new(0.8, 0.2, 0.85);
+  let bottom = Vec3::new(0.1, 0.8, 0.9);
+  let vertical = (n.y * 0.5 + 0.5).clamp(0.0, 1.0);
+  let mut color = top * vertical + bottom * (1.0 - vertical);
+
+  // Swirl bands using polar coordinates
+  let swirl = ((p.y * 1.4) + (p.x.atan2(p.z) * 3.0)).sin();
+  let swirl_mask = (swirl * 0.5 + 0.5).powf(2.0);
+  let swirl_color = Vec3::new(1.1, 0.45, 0.95);
+  color = color * (1.0 - swirl_mask * 0.35) + swirl_color * (swirl_mask * 0.35);
+
+  // Bubble speckles: bright highlights with soft halos
+  let bubble_noise = ((p.x * 5.0).sin() * (p.y * 6.3).cos() * (p.z * 7.1).sin()).abs();
+  let bubbles = ((bubble_noise - 0.6) / 0.25).clamp(0.0, 1.0).powf(3.2);
+  let bubble_color = Vec3::new(1.25, 1.18, 0.95);
+  color = color * (1.0 - bubbles * 0.4) + bubble_color * (bubbles * 0.6);
+
+  // Iridescent sheen (view-dependent)
+  let rim = (1.0 - glm::dot(&n, &Vec3::new(0.0, 0.0, 1.0))).powf(2.5);
+  color += Vec3::new(0.35, 0.25, 0.65) * (rim * 0.5);
+
+  // Lighting with glossy specular
+  let light_dir = Vec3::new(0.4, 0.75, 0.5).normalize();
+  let lambert = glm::dot(&n, &light_dir).max(0.0);
+  let spec = lambert.powf(40.0) * 0.4;
+  let ambient = 0.25;
+  color *= ambient + 0.95 * lambert;
+  color += Vec3::new(1.0, 0.9, 0.95) * spec;
+
+  Vec3::new(color.x.clamp(0.0, 1.0), color.y.clamp(0.0, 1.0), color.z.clamp(0.0, 1.0))
+}
+
 /// Generic shade entry — dispatches to the selected shader variant.
 pub fn shade(pos: Vec3, normal: Vec3) -> Vec3 {
   match get_shader_index() {
@@ -395,6 +479,8 @@ pub fn shade(pos: Vec3, normal: Vec3) -> Vec3 {
     1 => planet_shader_rock(pos, normal),
     2 => planet_shader_sun(pos, normal),
     3 => planet_shader_cheese(pos, normal),
+    4 => planet_shader_cat(pos, normal),
+    5 => planet_shader_bubblegum(pos, normal),
     _ => planet_shader_gas(pos, normal),
   }
 }
