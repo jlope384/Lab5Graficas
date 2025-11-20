@@ -148,16 +148,19 @@ fn render_solar_system(
     let cheese_scale = 4.0;
     let cat_scale = 3.6;
     let bubble_scale = 4.3;
-    let gas_radius = 720.0;
-    let rock_radius = 210.0;
-    let cheese_radius = 420.0;
+    let ice_scale = 4.8;
+    let rock_radius = 190.0;
     let cat_radius = 320.0;
-    let bubble_radius = 880.0;
-    let gas_angle = orbit_time * 0.35;
-    let rock_angle = orbit_time * 0.55;
-    let cheese_angle = orbit_time * 0.22;
-    let cat_angle = orbit_time * 0.41;
-    let bubble_angle = orbit_time * 0.3;
+    let cheese_radius = 470.0;
+    let gas_radius = 780.0;
+    let bubble_radius = 1020.0;
+    let ice_radius = 1350.0;
+    let rock_angle = orbit_time * 0.75;
+    let cat_angle = orbit_time * 0.55;
+    let cheese_angle = orbit_time * 0.35;
+    let bubble_angle = orbit_time * 0.22;
+    let gas_angle = orbit_time * 0.16;
+    let ice_angle = orbit_time * 0.08;
 
     let planets = [
         PlanetInstance {
@@ -167,34 +170,40 @@ fn render_solar_system(
             shader_idx: 2,
         },
         PlanetInstance {
-            translation: Vec3::new(gas_radius * gas_angle.cos(), gas_radius * gas_angle.sin() * 0.75, 0.0),
+            translation: Vec3::new(gas_radius * gas_angle.cos(), gas_radius * gas_angle.sin() * 0.65, 0.0),
             rotation: Vec3::new(0.05, 0.15, 0.0),
             scale: gas_scale,
             shader_idx: 0,
         },
         PlanetInstance {
-            translation: Vec3::new(rock_radius * rock_angle.cos(), rock_radius * rock_angle.sin() * 0.6, 0.0),
+            translation: Vec3::new(rock_radius * rock_angle.cos(), rock_radius * rock_angle.sin() * 0.9, 0.0),
             rotation: Vec3::new(-0.08, 0.35, 0.0),
             scale: rock_scale,
             shader_idx: 1,
         },
         PlanetInstance {
-            translation: Vec3::new(cheese_radius * cheese_angle.cos(), cheese_radius * cheese_angle.sin() * 0.65, 0.0),
+            translation: Vec3::new(cheese_radius * cheese_angle.cos(), cheese_radius * cheese_angle.sin() * 0.8, 0.0),
             rotation: Vec3::new(0.15, -0.22, 0.0),
             scale: cheese_scale,
             shader_idx: 3,
         },
         PlanetInstance {
-            translation: Vec3::new(cat_radius * cat_angle.cos(), cat_radius * cat_angle.sin() * 0.7, 0.0),
+            translation: Vec3::new(cat_radius * cat_angle.cos(), cat_radius * cat_angle.sin() * 0.75, 0.0),
             rotation: Vec3::new(-0.12, 0.18, 0.05),
             scale: cat_scale,
             shader_idx: 4,
         },
         PlanetInstance {
-            translation: Vec3::new(bubble_radius * bubble_angle.cos(), bubble_radius * bubble_angle.sin() * 0.55, 0.0),
+            translation: Vec3::new(bubble_radius * bubble_angle.cos(), bubble_radius * bubble_angle.sin() * 0.7, 0.0),
             rotation: Vec3::new(0.3, -0.1, 0.2),
             scale: bubble_scale,
             shader_idx: 5,
+        },
+        PlanetInstance {
+            translation: Vec3::new(ice_radius * ice_angle.cos(), ice_radius * ice_angle.sin() * 0.85, 0.0),
+            rotation: Vec3::new(-0.05, 0.12, -0.08),
+            scale: ice_scale,
+            shader_idx: 6,
         },
 
     ];
@@ -374,5 +383,9 @@ fn handle_input(
     if window.is_key_down(Key::Key7) {
         *solar_system_mode = false;
         set_shader_index(5);
+    }
+    if window.is_key_down(Key::Key8) {
+        *solar_system_mode = false;
+        set_shader_index(6);
     }
 }

@@ -472,6 +472,48 @@ pub fn planet_shader_bubblegum(pos: Vec3, normal: Vec3) -> Vec3 {
   Vec3::new(color.x.clamp(0.0, 1.0), color.y.clamp(0.0, 1.0), color.z.clamp(0.0, 1.0))
 }
 
+/// Ice shader: pale cyan plates, cracks, and frosty glow
+pub fn planet_shader_ice(pos: Vec3, normal: Vec3) -> Vec3 {
+  let n = normal.normalize();
+  let seed = noise_seed_vec3();
+  let p = pos + seed * 6.2;
+
+  // Base glacier gradient (poles brighter)
+  let pole = n.y.abs();
+  let shallow = Vec3::new(0.76, 0.92, 1.0);
+  let deep = Vec3::new(0.25, 0.6, 0.85);
+  let mut color = shallow * pole + deep * (1.0 - pole);
+
+  // Frozen plate structures
+  let plate = ((p.x * 1.3).sin() * (p.z * 1.6).cos()).abs();
+  let plate_mask = (plate * 0.8).powf(2.5);
+  let plate_color = Vec3::new(0.9, 0.98, 1.08);
+  color = color * (1.0 - plate_mask * 0.4) + plate_color * (plate_mask * 0.4);
+
+  // Cracks and crevasses
+  let crack_noise = ((p.x * 4.2).sin() * (p.y * 3.6).cos()).abs();
+  let crack_mask = ((crack_noise - 0.55) / 0.2).clamp(0.0, 1.0).powf(3.0);
+  color -= Vec3::new(crack_mask * 0.25, crack_mask * 0.3, crack_mask * 0.35);
+
+  // Frost sparkles
+  let sparkle = ((p.x * 8.5).sin() * (p.y * 9.1).cos() * (p.z * 7.9).sin()).abs().powf(12.0);
+  color += Vec3::new(0.4, 0.5, 0.6) * (sparkle * 0.4);
+
+  // Lighting with icy specular
+  let light_dir = Vec3::new(0.45, 0.8, 0.4).normalize();
+  let lambert = glm::dot(&n, &light_dir).max(0.0);
+  let spec = lambert.powf(50.0) * 0.35;
+  let ambient = 0.28;
+  color *= ambient + 0.95 * lambert;
+  color += Vec3::new(0.8, 0.9, 1.0) * spec;
+
+  // Cold rim glow
+  let rim = (1.0 - glm::dot(&n, &Vec3::new(0.0, 0.0, 1.0))).powf(2.8);
+  color += Vec3::new(0.3, 0.55, 0.85) * (rim * 0.3);
+
+  Vec3::new(color.x.clamp(0.0, 1.0), color.y.clamp(0.0, 1.0), color.z.clamp(0.0, 1.0))
+}
+
 /// Generic shade entry — dispatches to the selected shader variant.
 pub fn shade(pos: Vec3, normal: Vec3) -> Vec3 {
   match get_shader_index() {
@@ -481,6 +523,7 @@ pub fn shade(pos: Vec3, normal: Vec3) -> Vec3 {
     3 => planet_shader_cheese(pos, normal),
     4 => planet_shader_cat(pos, normal),
     5 => planet_shader_bubblegum(pos, normal),
+    6 => planet_shader_ice(pos, normal),
     _ => planet_shader_gas(pos, normal),
   }
 }
