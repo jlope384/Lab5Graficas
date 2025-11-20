@@ -328,12 +328,73 @@ pub fn planet_shader_rock(pos: Vec3, normal: Vec3) -> Vec3 {
   Vec3::new(color.x.clamp(0.0, 1.0), color.y.clamp(0.0, 1.0), color.z.clamp(0.0, 1.0))
 }
 
+/// Cheese-inspired shader: creamy yellows with porous holes and rind shading
+pub fn planet_shader_cheese(pos: Vec3, normal: Vec3) -> Vec3 {
+  let n = normal.normalize();
+  let seed = noise_seed_vec3();
+  let p = pos + seed * 5.3;
+
+  // Base creamy gradient with slight vertical variation
+  let base_core = Vec3::new(1.0, 0.92, 0.55);
+  let base_rind = Vec3::new(0.95, 0.78, 0.38);
+  let vertical = (n.y * 0.5 + 0.5).clamp(0.0, 1.0);
+  let mut color = base_core * (1.0 - vertical * 0.4) + base_rind * (vertical * 0.4);
+
+  // Hole mask using high-frequency trig noise
+  let hole_noise = ((p.x * 3.4).sin() * (p.y * 4.1).cos() * (p.z * 3.8).sin()).abs();
+  let hole_mask = ((hole_noise - 0.35) / 0.25).clamp(0.0, 1.0).powf(2.5);
+  let cavity = Vec3::new(0.32, 0.24, 0.14);
+  let hole_depth = hole_mask;
+  // Darken the cores to simulate depth
+  color = color * (1.0 - hole_depth * 0.45) + cavity * (hole_depth * 0.8);
+  // Brighten the rim slightly for contrast
+  let rim_mask = (hole_depth * 1.4).clamp(0.0, 1.0) - hole_depth.powf(1.4);
+  let rim_color = Vec3::new(1.05, 0.95, 0.68);
+  color += rim_color * (rim_mask * 0.35);
+
+  // Veiny marbling pattern to add extra detail lines
+  let vein = (((p.x * 1.7 + p.y * 0.9).sin() * (p.z * 1.3).cos()).abs() * 0.8).powf(3.5);
+  let vein_color = Vec3::new(1.05, 0.95, 0.65);
+  color = color * (1.0 - vein * 0.25) + vein_color * (vein * 0.25);
+
+  // Thin rind cracks around equator for visual complexity
+  let equator = (pos.y * 4.5).sin().abs().powf(6.0);
+  let crack_noise = ((p.x * 5.2).sin() * (p.z * 5.9).sin()).abs().powf(3.0);
+  let crack_mask = (equator * crack_noise) * 0.5;
+  color -= Vec3::new(crack_mask * 0.3, crack_mask * 0.22, crack_mask * 0.18);
+
+  // Sparse darker rind spots for aged look
+  let rind_spot = ((p.x * 2.3).sin() + (p.z * 2.1).cos()).abs() * 0.5;
+  let rind_mask = ((rind_spot - 0.55) / 0.25).clamp(0.0, 1.0).powf(2.0);
+  color = color * (1.0 - rind_mask * 0.15) + Vec3::new(0.6, 0.45, 0.25) * (rind_mask * 0.15);
+
+  // Bubble highlights to suggest glossy fat pockets
+  let bubble = ((p.x * 1.6 + p.y * 0.9).sin() * 0.5 + 0.5).powf(6.0);
+  color += Vec3::new(0.08, 0.07, 0.03) * bubble;
+
+  // Gentle rind speckles near poles
+  let speckle = ((p.x * 7.0).sin().abs() + (p.z * 6.0).cos().abs()) * 0.12;
+  let speckle_amt = speckle * vertical * 0.25;
+  color -= Vec3::new(speckle_amt, speckle_amt, speckle_amt * 0.7);
+
+  // Lighting: soft diffuse with mild specular to keep cheesy sheen
+  let light_dir = Vec3::new(0.5, 0.7, 0.4).normalize();
+  let lambert = glm::dot(&n, &light_dir).max(0.0);
+  let spec = lambert.powf(20.0) * 0.18;
+  let ambient = 0.35;
+  color *= ambient + 0.9 * lambert;
+  color += Vec3::new(0.45, 0.38, 0.25) * spec;
+
+  Vec3::new(color.x.clamp(0.0, 1.0), color.y.clamp(0.0, 1.0), color.z.clamp(0.0, 1.0))
+}
+
 /// Generic shade entry — dispatches to the selected shader variant.
 pub fn shade(pos: Vec3, normal: Vec3) -> Vec3 {
   match get_shader_index() {
     0 => planet_shader_gas(pos, normal),
     1 => planet_shader_rock(pos, normal),
     2 => planet_shader_sun(pos, normal),
+    3 => planet_shader_cheese(pos, normal),
     _ => planet_shader_gas(pos, normal),
   }
 }

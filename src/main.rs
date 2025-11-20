@@ -145,10 +145,13 @@ fn render_solar_system(
     let sun_scale = 8.0;
     let gas_scale = 5.0;
     let rock_scale = 3.2;
+    let cheese_scale = 4.0;
     let gas_radius = 170.0;
     let rock_radius = 250.0;
+    let cheese_radius = 420.0;
     let gas_angle = orbit_time * 0.35;
     let rock_angle = orbit_time * 0.55;
+    let cheese_angle = orbit_time * 0.22;
 
     let planets = [
         PlanetInstance {
@@ -168,6 +171,12 @@ fn render_solar_system(
             rotation: Vec3::new(-0.08, 0.35, 0.0),
             scale: rock_scale,
             shader_idx: 1,
+        },
+        PlanetInstance {
+            translation: Vec3::new(cheese_radius * cheese_angle.cos(), cheese_radius * cheese_angle.sin() * 0.65, 0.0),
+            rotation: Vec3::new(0.15, -0.22, 0.0),
+            scale: cheese_scale,
+            shader_idx: 3,
         },
     ];
 
@@ -334,5 +343,9 @@ fn handle_input(
     if window.is_key_down(Key::Key4) {
         *solar_system_mode = false;
         set_shader_index(0);
+    }
+    if window.is_key_down(Key::Key5) {
+        *solar_system_mode = false;
+        set_shader_index(3);
     }
 }
