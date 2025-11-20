@@ -19,7 +19,7 @@ use vertex::Vertex;
 use shaders::{get_shader_index, set_light_direction, set_light_intensity, set_noise_seed, set_shader_index, vertex_shader};
 
 const DEFAULT_SCALE: f32 = 4.5;
-const SOLAR_SYSTEM_SCALE: f32 = DEFAULT_SCALE * 0.15;
+const SOLAR_SYSTEM_SCALE: f32 = DEFAULT_SCALE * 0.25;
 
 struct PlanetInstance {
     translation: Vec3,
@@ -140,7 +140,8 @@ fn render_solar_system(
     orbit_time: f32,
     solar_zoom: f32,
 ) {
-    let view_offset = default_translation - camera_offset;
+    let parallax = 0.35;
+    let view_offset = default_translation - camera_offset * parallax;
     let zoomed_scale = scale * solar_zoom;
     let scale_factor = zoomed_scale / DEFAULT_SCALE;
     let sun_scale = 8.0;
@@ -151,13 +152,13 @@ fn render_solar_system(
     let bubble_scale = 4.3;
     let ice_scale = 4.8;
     let giant_scale = 6.2;
-    let rock_radius = 190.0;
-    let cat_radius = 320.0;
-    let cheese_radius = 470.0;
-    let gas_radius = 780.0;
-    let bubble_radius = 1020.0;
-    let ice_radius = 1350.0;
-    let giant_radius = 1900.0;
+    let rock_radius = 260.0;
+    let cat_radius = 420.0;
+    let cheese_radius = 600.0;
+    let gas_radius = 980.0;
+    let bubble_radius = 1280.0;
+    let ice_radius = 1680.0;
+    let giant_radius = 2300.0;
     let rock_angle = orbit_time * 0.25;
     let cat_angle = orbit_time * 0.18;
     let cheese_angle = orbit_time * 0.12;
@@ -266,6 +267,30 @@ fn render_solar_system(
 
 }
 
+fn draw_star_skybox(framebuffer: &mut Framebuffer, time: f32) {
+    let width = framebuffer.width;
+    let height = framebuffer.height;
+
+    for y in 0..height {
+        for x in 0..width {
+            let fx = x as f32;
+            let fy = y as f32;
+            let base = fx * 12.9898 + fy * 78.233;
+            let noise = (base.sin() * 43758.5453).fract();
+            if noise > 0.996 {
+                let sparkle = ((fx * 0.18 + fy * 0.11 + time * 0.7).sin() * 0.5 + 0.5).clamp(0.0, 1.0);
+                let intensity = ((noise - 0.996) * 250.0).clamp(0.0, 1.0);
+                let brightness = (0.65 + 0.35 * sparkle) * intensity;
+                let r = (brightness * (0.85 + 0.15 * sparkle) * 255.0).clamp(0.0, 255.0) as u32;
+                let g = (brightness * (0.9 + 0.1 * sparkle) * 255.0).clamp(0.0, 255.0) as u32;
+                let b = (brightness * (1.0 + 0.2 * sparkle) * 255.0).clamp(0.0, 255.0) as u32;
+                let color = (r << 16) | (g << 8) | b;
+                framebuffer.set_pixel_raw(x, y, color);
+            }
+        }
+    }
+}
+
 fn main() {
     let window_width = 800;
     let window_height = 600;
@@ -320,9 +345,11 @@ fn main() {
         );
 
         framebuffer.clear();
+        let elapsed = start_time.elapsed().as_secs_f32();
+        draw_star_skybox(&mut framebuffer, elapsed);
 
         if solar_system_mode {
-            let orbit_time = start_time.elapsed().as_secs_f32();
+            let orbit_time = elapsed;
             render_solar_system(
                 &mut framebuffer,
                 &vertex_arrays,
@@ -337,7 +364,6 @@ fn main() {
                 &mut framebuffer,
                 &ship_vertex_array,
                 &default_translation,
-                &camera_offset,
             );
         } else {
             set_light_direction(Vec3::new(0.6, 0.7, 0.3).normalize());
@@ -361,17 +387,20 @@ fn render_camera_ship(
     framebuffer: &mut Framebuffer,
     ship_vertices: &[Vertex],
     default_translation: &Vec3,
-    camera_offset: &Vec3,
 ) {
-    let ship_offset = Vec3::new(0.0, -100.0, -18.0);
-    let ship_translation = default_translation.clone() - camera_offset.clone() + ship_offset;
+    let ship_offset = Vec3::new(70.0, 80.0, -220.0);
+    let ship_translation = default_translation.clone() + ship_offset;
     let ship_scale = DEFAULT_SCALE * 0.26;
-    let ship_rotation = Vec3::new(-PI/0.2 , PI + PI / 2.2, PI);
+    let ship_rotation = Vec3::new(PI / 2.0, PI / 2.0, PI / 2.0);
 
     let previous_shader = get_shader_index();
     set_shader_index(8);
     set_light_direction(Vec3::new(0.0, 0.0, 1.0));
     set_light_intensity(1.2);
+
+    for depth in framebuffer.zbuffer.iter_mut() {
+        *depth = f32::INFINITY;
+    }
 
     let model_matrix = create_model_matrix(ship_translation, ship_scale, ship_rotation);
     let uniforms = Uniforms { model_matrix };
