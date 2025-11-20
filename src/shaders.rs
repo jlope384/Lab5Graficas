@@ -607,6 +607,30 @@ pub fn planet_shader_giant(pos: Vec3, normal: Vec3) -> Vec3 {
   Vec3::new(color.x.clamp(0.0, 1.0), color.y.clamp(0.0, 1.0), color.z.clamp(0.0, 1.0))
 }
 
+/// Silver hull shader for the camera-follow ship
+pub fn planet_shader_ship(pos: Vec3, normal: Vec3) -> Vec3 {
+  let n = normal.normalize();
+  let p = pos;
+
+  let base = Vec3::new(0.7, 0.72, 0.78);
+  let darker = Vec3::new(0.3, 0.32, 0.35);
+  let panel = ((p.x * 4.0).sin().abs() * 0.4 + (p.z * 3.2).cos().abs() * 0.6).clamp(0.0, 1.0);
+  let mut color = base * (1.0 - panel * 0.3) + darker * (panel * 0.3);
+
+  let streak = ((p.y * 7.5).sin().abs()).powf(3.0);
+  color += Vec3::new(0.1, 0.1, 0.12) * streak;
+
+  let light_dir = get_light_direction();
+  let lambert = glm::dot(&n, &light_dir).max(0.0);
+  let spec = lambert.powf(80.0) * 0.6;
+  let ambient = 0.25;
+  let intensity = get_light_intensity();
+  color *= (ambient + 0.9 * lambert) * intensity;
+  color += Vec3::new(0.8, 0.82, 0.9) * spec;
+
+  Vec3::new(color.x.clamp(0.0, 1.0), color.y.clamp(0.0, 1.0), color.z.clamp(0.0, 1.0))
+}
+
 /// Generic shade entry — dispatches to the selected shader variant.
 pub fn shade(pos: Vec3, normal: Vec3) -> Vec3 {
   match get_shader_index() {
@@ -618,6 +642,7 @@ pub fn shade(pos: Vec3, normal: Vec3) -> Vec3 {
     5 => planet_shader_bubblegum(pos, normal),
     6 => planet_shader_ice(pos, normal),
     7 => planet_shader_giant(pos, normal),
+    8 => planet_shader_ship(pos, normal),
     _ => planet_shader_gas(pos, normal),
   }
 }

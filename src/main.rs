@@ -16,7 +16,7 @@ use framebuffer::Framebuffer;
 use obj::Obj;
 use triangle::triangle;
 use vertex::Vertex;
-use shaders::{set_light_direction, set_light_intensity, set_noise_seed, set_shader_index, vertex_shader};
+use shaders::{get_shader_index, set_light_direction, set_light_intensity, set_noise_seed, set_shader_index, vertex_shader};
 
 const DEFAULT_SCALE: f32 = 4.5;
 const SOLAR_SYSTEM_SCALE: f32 = DEFAULT_SCALE * 0.15;
@@ -301,6 +301,8 @@ fn main() {
 
     let obj = Obj::load("assets/models/planetaff.obj").expect("Failed to load obj");
     let vertex_arrays = obj.get_vertex_array();
+    let ship_obj = Obj::load("assets/models/Nave.obj").expect("Failed to load ship obj");
+    let ship_vertex_array = ship_obj.get_vertex_array();
     let start_time = Instant::now();
 
     while window.is_open() {
@@ -331,6 +333,12 @@ fn main() {
                 orbit_time,
                 solar_zoom,
             );
+            render_camera_ship(
+                &mut framebuffer,
+                &ship_vertex_array,
+                &default_translation,
+                &camera_offset,
+            );
         } else {
             set_light_direction(Vec3::new(0.6, 0.7, 0.3).normalize());
             set_light_intensity(1.0);
@@ -347,6 +355,29 @@ fn main() {
 
         std::thread::sleep(frame_delay);
     }
+}
+
+fn render_camera_ship(
+    framebuffer: &mut Framebuffer,
+    ship_vertices: &[Vertex],
+    default_translation: &Vec3,
+    camera_offset: &Vec3,
+) {
+    let ship_offset = Vec3::new(0.0, -100.0, -18.0);
+    let ship_translation = default_translation.clone() - camera_offset.clone() + ship_offset;
+    let ship_scale = DEFAULT_SCALE * 0.26;
+    let ship_rotation = Vec3::new(-PI/0.2 , PI + PI / 2.2, PI);
+
+    let previous_shader = get_shader_index();
+    set_shader_index(8);
+    set_light_direction(Vec3::new(0.0, 0.0, 1.0));
+    set_light_intensity(1.2);
+
+    let model_matrix = create_model_matrix(ship_translation, ship_scale, ship_rotation);
+    let uniforms = Uniforms { model_matrix };
+    render(framebuffer, &uniforms, ship_vertices);
+
+    set_shader_index(previous_shader);
 }
 
 fn handle_input(
