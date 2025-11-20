@@ -69,4 +69,5 @@ cargo run --release
 ### Planeta de hielo
 ![Ice planet Placeholder](docs/images/hielo.png)
 
-
+## Link al video
+https://drive.google.com/drive/folders/1t7j4SSQ6dNopixBCfccIV2OI8zwALauo?usp=sharing
