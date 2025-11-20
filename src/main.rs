@@ -69,6 +69,31 @@ fn create_model_matrix(translation: Vec3, scale: f32, rotation: Vec3) -> Mat4 {
     transform_matrix * rotation_matrix
 }
 
+fn rotate_vec3(vec: Vec3, rotation: Vec3) -> Vec3 {
+    let (sin_x, cos_x) = rotation.x.sin_cos();
+    let (sin_y, cos_y) = rotation.y.sin_cos();
+    let (sin_z, cos_z) = rotation.z.sin_cos();
+
+    // Apply X, then Y, then Z rotation so ordering matches create_model_matrix
+    let mut rotated = vec;
+    let y = rotated.y * cos_x - rotated.z * sin_x;
+    let z = rotated.y * sin_x + rotated.z * cos_x;
+    rotated.y = y;
+    rotated.z = z;
+
+    let x = rotated.x * cos_y + rotated.z * sin_y;
+    let z = -rotated.x * sin_y + rotated.z * cos_y;
+    rotated.x = x;
+    rotated.z = z;
+
+    let x = rotated.x * cos_z - rotated.y * sin_z;
+    let y = rotated.x * sin_z + rotated.y * cos_z;
+    rotated.x = x;
+    rotated.y = y;
+
+    rotated
+}
+
 fn render(framebuffer: &mut Framebuffer, uniforms: &Uniforms, vertex_array: &[Vertex]) {
     let mut transformed_vertices = Vec::with_capacity(vertex_array.len());
     for vertex in vertex_array {
@@ -145,8 +170,9 @@ fn render_solar_system(
 
     for planet in planets.iter() {
         set_shader_index(planet.shader_idx);
+        let rotated_translation = rotate_vec3(planet.translation, base_rotation);
         let model_matrix = create_model_matrix(
-            planet.translation + view_offset,
+            rotated_translation + view_offset,
             planet.scale * scale_factor,
             base_rotation + planet.rotation,
         );
@@ -185,7 +211,7 @@ fn main() {
     let mut camera_offset = Vec3::new(0.0, 0.0, 0.0);
     let mut rotation = Vec3::new(0.0, 0.0, 0.0);
     let mut scale = DEFAULT_SCALE * 0.15;
-    let mut solar_system_mode = false;
+    let mut solar_system_mode = true;
 
     let obj = Obj::load("assets/models/planetaff.obj").expect("Failed to load obj");
     let vertex_arrays = obj.get_vertex_array();
